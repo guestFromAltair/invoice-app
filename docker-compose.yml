@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+
+  # ─── PostgreSQL database
+  postgres:
+    image: postgres:16-alpine
+    container_name: invoiceapp-postgres
+
+    environment:
+      POSTGRES_DB: invoiceapp
+      POSTGRES_USER: invoiceapp
+      POSTGRES_PASSWORD: invoiceapp
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U invoiceapp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Spring Boot backend
+  backend:
+    build:
+      context: ./invoice-app-backend
+
+    container_name: invoiceapp-backend
+
+    ports:
+      - "8080:8080"
+
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/invoiceapp
+      SPRING_DATASOURCE_USERNAME: invoiceapp
+      SPRING_DATASOURCE_PASSWORD: invoiceapp
+
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+# ─── Named volumes
+volumes:
+  postgres_data:
