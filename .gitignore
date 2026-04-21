@@ -1,0 +1,34 @@
+# --- IntelliJ IDEA ---
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# --- Maven ---
+target/
+*.class
+*.jar
+*.war
+.mvn/
+.mvn/wrapper/maven-wrapper.jar
+
+# --- OS Specific ---
+.DS_Store
+Thumbs.db
+
+# --- Logs/Temp ---
+*.log
+*.tmp
+*.bak
+
+# --- Databases (Local testing) ---
+*.h2.db
+*.sqlite
+
+# --- Development Environments ---
+.vscode/
+node_modules/
+dist/
+.env
+.env.local
