@@ -1,50 +1,45 @@
 version: '3.8'
 
 services:
-
-  # ─── PostgreSQL database
+  # PostgreSQL database
+  # NOTE: Using default credentials for demo/local development purposes only.
   postgres:
     image: postgres:16-alpine
     container_name: invoiceapp-postgres
-
     environment:
-      POSTGRES_DB: invoiceapp
-      POSTGRES_USER: invoiceapp
-      POSTGRES_PASSWORD: invoiceapp
-
+      POSTGRES_DB: ${DB_NAME:-invoiceapp}
+      POSTGRES_USER: ${DB_USER:-invoiceapp}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-invoiceapp}
     ports:
       - "5432:5432"
-
     volumes:
       - postgres_data:/var/lib/postgresql/data
-
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U invoiceapp"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # ─── Spring Boot backend
+  # Spring Boot backend
   backend:
     build:
       context: ./invoice-app-backend
-
     container_name: invoiceapp-backend
-
     ports:
       - "8080:8080"
-
+#      - "5005:5005" # Debug port
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/invoiceapp
-      SPRING_DATASOURCE_USERNAME: invoiceapp
-      SPRING_DATASOURCE_PASSWORD: invoiceapp
-
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-invoiceapp}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER:-invoiceapp}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-invoiceapp}
+      APPLICATION_SECURITY_JWT_SECRET_KEY: ${JWT_SECRET}
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
-
+      # JVM waits for a debugger on port 5005
+      JAVA_TOOL_OPTIONS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
     depends_on:
       postgres:
         condition: service_healthy
 
-# ─── Named volumes
+# Named volumes
 volumes:
   postgres_data:

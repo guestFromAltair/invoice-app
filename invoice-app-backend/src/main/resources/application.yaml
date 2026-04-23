@@ -3,9 +3,9 @@ spring:
     name: invoice-app-backend
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/invoiceapp
-    username: invoiceapp
-    password: invoiceapp
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/invoiceapp}
+    username: ${SPRING_DATASOURCE_USERNAME:invoiceapp}
+    password: ${SPRING_DATASOURCE_PASSWORD:invoiceapp}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -33,3 +33,9 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+
+application:
+  security:
+    jwt:
+      secret-key: ${JWT_SECRET:provide_a_real_secret_key}
+      expiration: 86400000
