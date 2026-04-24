@@ -33,7 +33,7 @@ public class AuthController {
         );
     }
 
-    private record RegisterRequest(
+    public record RegisterRequest(
             @Email(message = "Must be a valid email address")
             @NotBlank(message = "Email is required")
             String email,
@@ -43,7 +43,7 @@ public class AuthController {
             String password
     ) {}
 
-    private record LoginRequest(
+    public record LoginRequest(
             @NotBlank String email,
             @NotBlank String password
     ) {}

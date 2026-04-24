@@ -1,5 +1,6 @@
 package com.invoiceapp.backend.shared.exception;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -42,6 +43,18 @@ public class GlobalExceptionHandler {
                 HttpStatus.UNAUTHORIZED, "Invalid email or password"
         );
         detail.setTitle("Unauthorized");
+        return detail;
+    }
+
+    // Thrown by PostgreSQL when a constraint is violated
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ProblemDetail handleDataIntegrity(DataIntegrityViolationException ex) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT,
+                "This operation conflicts with existing data. " +
+                        "Ensure all related records are removed first."
+        );
+        detail.setTitle("Data integrity violation");
         return detail;
     }
 
