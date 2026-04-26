@@ -11,10 +11,17 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import com.invoiceapp.backend.pdf.service.PdfGenerationService;
+import com.invoiceapp.backend.auth.domain.UserRepository;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 @RestController
@@ -23,6 +30,8 @@ import java.util.UUID;
 public class InvoiceController {
 
     private final InvoiceService invoiceService;
+    private final PdfGenerationService pdfGenerationService;
+    private final UserRepository userRepository;
 
     @GetMapping
     public Page<InvoiceService.InvoiceResponse> findAll(
@@ -129,4 +138,19 @@ public class InvoiceController {
             @NotEmpty(message = "At least one line item is required")
             List<LineItemRequest> lineItems
     ) {}
+
+    @GetMapping(value = "/{id}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> downloadPdf(@PathVariable UUID id) {
+        String email = Objects.requireNonNull(SecurityContextHolder.getContext().getAuthentication()).getName();
+        UUID userId = userRepository.findByEmail(email).orElseThrow().getId();
+
+        byte[] pdfBytes = pdfGenerationService.generateInvoicePdf(id, userId);
+
+        String filename = "invoice-" + id + ".pdf";
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_PDF_VALUE)
+                .body(pdfBytes);
+    }
 }
