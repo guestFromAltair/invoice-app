@@ -5,6 +5,7 @@ import com.invoiceapp.backend.auth.domain.User;
 import com.invoiceapp.backend.auth.domain.UserRepository;
 import com.invoiceapp.backend.invoice.domain.*;
 import com.invoiceapp.backend.shared.exception.InvoiceAppException;
+import com.invoiceapp.backend.shared.metrics.InvoiceMetrics;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -26,6 +27,8 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
     private final InvoiceRepository invoiceRepository;
     private final UserRepository userRepository;
+    private final InvoiceService invoiceService;
+    private final InvoiceMetrics invoiceMetrics;
 
     public record PaymentRequest(
             BigDecimal amount,
@@ -111,9 +114,11 @@ public class PaymentService {
                 .subtract(newAmountPaid)
                 .setScale(4, RoundingMode.HALF_UP);
 
-        if (newRemaining.compareTo(BigDecimal.ZERO) == 0) {
-            invoice.setStatus(InvoiceStatus.PAID);
-        }
+        invoice.setStatus(newRemaining.compareTo(BigDecimal.ZERO) == 0 ? InvoiceStatus.PAID : invoice.getStatus());
+        invoiceRepository.saveAndFlush(invoice);
+
+        double newBalance = invoiceService.computeTotalOutstandingBalance();
+        invoiceMetrics.updateOutstandingBalance(newBalance);
 
         return toResponse(saved);
     }

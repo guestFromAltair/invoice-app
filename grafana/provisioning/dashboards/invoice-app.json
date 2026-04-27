@@ -1,0 +1,68 @@
+{
+  "title": "InvoiceApp — Business Metrics",
+  "uid": "invoice-app-business",
+  "version": 1,
+  "schemaVersion": 38,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Invoices Created (per minute)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(invoices_total{application=\"invoice-app\"}[5m]) * 60",
+          "legendFormat": "invoices / min"
+        }
+      ],
+      "description": "Rate of invoice creation over time. Spikes indicate bulk activity."
+    },
+    {
+      "id": 2,
+      "title": "Outstanding Balance (EUR)",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "invoices_outstanding_balance{application=\"invoice-app\", currency=\"EUR\"}",
+          "legendFormat": "Outstanding",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "description": "Current total unpaid invoice value."
+    },
+    {
+      "id": 3,
+      "title": "Invoice Status Transitions (per minute)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(invoices_status_transitions_total[5m]) * 60",
+          "legendFormat": "→ {{to_status}}"
+        }
+      ],
+      "description": "How often invoices move to each status. A rising CANCELLED rate needs attention."
+    },
+    {
+      "id": 4,
+      "title": "HTTP Request Latency p99 (ms)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{application='invoice-app', uri!=\"UNKNOWN\"}[5m])) by (le, uri)) * 1000",
+          "legendFormat": "{{uri}}"
+        }
+      ],
+      "description": "p99 latency per endpoint. 99th percentile means 99% of requests are faster than this line."
+    }
+  ]
+}

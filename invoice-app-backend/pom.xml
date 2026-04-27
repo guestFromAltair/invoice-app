@@ -138,6 +138,10 @@
 			<artifactId>layout</artifactId>
 			<version>9.6.0</version>
 		</dependency>
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-registry-prometheus</artifactId>
+		</dependency>
 	</dependencies>
 
 	<build>

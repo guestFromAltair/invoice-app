@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -39,4 +40,15 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
 
     @Query("SELECT NEXTVAL('invoice_number_seq')")
     Long nextInvoiceSequence();
+
+    @Query(value = """
+            SELECT
+                (SELECT COALESCE(SUM(total), 0) FROM invoices
+                 WHERE status IN ('SENT', 'OVERDUE'))
+                -
+                (SELECT COALESCE(SUM(p.amount), 0) FROM payments p
+                 JOIN invoices i ON p.invoice_id = i.id
+                 WHERE i.status IN ('SENT', 'OVERDUE'))
+            """, nativeQuery = true)
+    BigDecimal computeOutstandingBalance();
 }
