@@ -6,6 +6,7 @@ import com.invoiceapp.backend.client.domain.Client;
 import com.invoiceapp.backend.client.domain.ClientRepository;
 import com.invoiceapp.backend.invoice.domain.*;
 import com.invoiceapp.backend.shared.exception.InvoiceAppException;
+import com.invoiceapp.backend.shared.metrics.InvoiceMetrics;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -29,6 +30,7 @@ public class InvoiceService {
     private final InvoiceRepository invoiceRepository;
     private final ClientRepository clientRepository;
     private final UserRepository userRepository;
+    private final InvoiceMetrics invoiceMetrics;
 
     public record LineItemRequest(
             String description,
@@ -140,6 +142,7 @@ public class InvoiceService {
         invoice.recalculateTotals();
 
         Invoice saved = invoiceRepository.save(invoice);
+        invoiceMetrics.recordInvoiceCreated();
         return toResponse(saved);
     }
 
@@ -192,7 +195,7 @@ public class InvoiceService {
                         .build())
                 .toList();
 
-        // Now that the current items have been deletes we create a new (updated) list of LineItems
+        // Now that the current items have been deleted we create a new (updated) list of LineItems
         invoice.getLineItems().addAll(newItems);
         invoice.recalculateTotals();
         return toResponse(invoice);
@@ -237,6 +240,13 @@ public class InvoiceService {
         }
 
         invoice.setStatus(target);
+
+        invoiceMetrics.recordStatusTransition(target);
+        if (target == InvoiceStatus.SENT || target == InvoiceStatus.PAID || target == InvoiceStatus.CANCELLED) {
+            double newBalance = computeTotalOutstandingBalance();
+            invoiceMetrics.updateOutstandingBalance(newBalance);
+        }
+
         return toResponse(invoice);
     }
 
@@ -244,7 +254,7 @@ public class InvoiceService {
         BigDecimal amountPaid = invoice.getPayments() == null
                 ? BigDecimal.ZERO
                 : invoice.getPayments().stream()
-                  .map(p -> p.getAmount())
+                  .map(Payment::getAmount)
                   .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal remaining = invoice.getTotal().subtract(amountPaid);
@@ -279,5 +289,10 @@ public class InvoiceService {
                 lineItemResponses,
                 invoice.getCreatedAt().toString()
         );
+    }
+
+    public double computeTotalOutstandingBalance() {
+        BigDecimal total = invoiceRepository.computeOutstandingBalance();
+        return total != null ? total.doubleValue() : 0.0;
     }
 }
