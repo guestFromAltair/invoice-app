@@ -1,5 +1,4 @@
 import {useParams} from 'react-router-dom';
-import {useSelector} from 'react-redux';
 import {
     useGetInvoiceQuery,
     useGetPaymentsQuery,
@@ -8,7 +7,6 @@ import {
     useMarkInvoicePaidMutation,
     useRecordPaymentMutation, useLazyDownloadInvoicePdfQuery,
 } from '../store/apiSlice';
-import {selectToken} from '../store/authSlice';
 import {Button} from '../components/ui/button';
 import {Badge} from '../components/ui/badge';
 import {Card, CardContent, CardHeader, CardTitle} from '../components/ui/card';
@@ -28,16 +26,34 @@ const statusVariant: Record<InvoiceStatus, 'default' | 'secondary' | 'destructiv
 };
 
 export default function InvoiceDetailPage() {
-    const {id} = useParams<{ id: string }>();
-    const token = useSelector(selectToken);
+    const { id: rawId } = useParams<{ id: string }>();
 
-    const {data: invoice, isLoading} = useGetInvoiceQuery(id ?? skipToken);
-    const {data: payments = []} = useGetPaymentsQuery(id ?? skipToken);
+    const { data: invoice, isLoading } = useGetInvoiceQuery(rawId ?? skipToken);
+    const { data: payments = [] } = useGetPaymentsQuery(rawId ?? skipToken);
 
     const [sendInvoice, {isLoading: isSending}] = useSendInvoiceMutation();
     const [cancelInvoice, {isLoading: isCancelling}] = useCancelInvoiceMutation();
     const [markPaid, {isLoading: isMarkingPaid}] = useMarkInvoicePaidMutation();
     const [recordPayment] = useRecordPaymentMutation();
+    const [triggerDownload, { isFetching: isDownloading }] = useLazyDownloadInvoicePdfQuery();
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center h-64 text-muted-foreground">
+                Loading invoice...
+            </div>
+        );
+    }
+
+    if (!invoice || !rawId) {
+        return (
+            <div className="text-center py-12 text-muted-foreground">
+                Invoice not found
+            </div>
+        );
+    }
+
+    const id = rawId;
 
     const handleTransition = async (
         action: () => Promise<unknown>,
@@ -51,23 +67,19 @@ export default function InvoiceDetailPage() {
         }
     };
 
-    const [triggerDownload, { isFetching: isDownloading }] = useLazyDownloadInvoicePdfQuery();
-
     const handleDownloadPdf = async () => {
         try {
-            const blob = await triggerDownload(id!).unwrap();
+            const blob = await triggerDownload(id).unwrap();
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
 
             link.href = url;
-            link.download = `${invoice!.invoiceNumber}.pdf`;
+            link.download = `${invoice.invoiceNumber}.pdf`;
             document.body.appendChild(link);
-
             link.click();
 
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
-
             toast.success('PDF downloaded');
         } catch {
             toast.error('Failed to download PDF');
@@ -76,18 +88,6 @@ export default function InvoiceDetailPage() {
 
     const formatCurrency = (amount: number) =>
         new Intl.NumberFormat('fr-FR', {style: 'currency', currency: 'EUR'}).format(amount);
-
-    if (isLoading) return (
-        <div className="flex items-center justify-center h-64 text-muted-foreground">
-            Loading invoice...
-        </div>
-    );
-
-    if (!invoice) return (
-        <div className="text-center py-12 text-muted-foreground">
-            Invoice not found
-        </div>
-    );
 
     const canSend = invoice.status === 'DRAFT';
     const canCancel = invoice.status === 'DRAFT' || invoice.status === 'SENT' || invoice.status === 'OVERDUE';
@@ -122,7 +122,7 @@ export default function InvoiceDetailPage() {
                 {canSend && (
                     <Button
                         onClick={() => handleTransition(
-                            () => sendInvoice(id!).unwrap(),
+                            () => sendInvoice(id).unwrap(),
                             'Invoice sent'
                         )}
                         disabled={isSending}
@@ -134,10 +134,10 @@ export default function InvoiceDetailPage() {
 
                 {canPay && (
                     <PaymentDialog
-                        invoiceId={id!}
+                        invoiceId={id}
                         remainingBalance={invoice.remainingBalance}
                         onSubmit={async (data: PaymentRequest) => {
-                            await recordPayment({invoiceId: id!, body: data}).unwrap();
+                            await recordPayment({invoiceId: id, body: data}).unwrap();
                             toast.success('Payment recorded');
                         }}
                     />
@@ -147,7 +147,7 @@ export default function InvoiceDetailPage() {
                     <Button
                         variant="destructive"
                         onClick={() => handleTransition(
-                            () => cancelInvoice(id!).unwrap(),
+                            () => cancelInvoice(id).unwrap(),
                             'Invoice cancelled'
                         )}
                         disabled={isCancelling}
@@ -161,7 +161,7 @@ export default function InvoiceDetailPage() {
                     <Button
                         variant="outline"
                         onClick={() => handleTransition(
-                            () => markPaid(id!).unwrap(),
+                            () => markPaid(id).unwrap(),
                             'Invoice marked as paid'
                         )}
                         disabled={isMarkingPaid}
