@@ -6,7 +6,7 @@ import {
     useSendInvoiceMutation,
     useCancelInvoiceMutation,
     useMarkInvoicePaidMutation,
-    useRecordPaymentMutation,
+    useRecordPaymentMutation, useLazyDownloadInvoicePdfQuery,
 } from '../store/apiSlice';
 import {selectToken} from '../store/authSlice';
 import {Button} from '../components/ui/button';
@@ -51,11 +51,27 @@ export default function InvoiceDetailPage() {
         }
     };
 
-    const handleDownloadPdf = () => {
-        window.open(
-            `/api/invoices/${id}/pdf?token=${token}`,
-            '_blank'
-        );
+    const [triggerDownload, { isFetching: isDownloading }] = useLazyDownloadInvoicePdfQuery();
+
+    const handleDownloadPdf = async () => {
+        try {
+            const blob = await triggerDownload(id!).unwrap();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+
+            link.href = url;
+            link.download = `${invoice!.invoiceNumber}.pdf`;
+            document.body.appendChild(link);
+
+            link.click();
+
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            toast.success('PDF downloaded');
+        } catch {
+            toast.error('Failed to download PDF');
+        }
     };
 
     const formatCurrency = (amount: number) =>
@@ -94,9 +110,13 @@ export default function InvoiceDetailPage() {
             </div>
 
             <div className="flex gap-2 flex-wrap">
-                <Button variant="outline" onClick={handleDownloadPdf}>
-                    <Download size={16} className="mr-2"/>
-                    Download PDF
+                <Button
+                    variant="outline"
+                    onClick={handleDownloadPdf}
+                    disabled={isDownloading}
+                >
+                    <Download size={16} className="mr-2" />
+                    {isDownloading ? 'Generating...' : 'Download PDF'}
                 </Button>
 
                 {canSend && (
