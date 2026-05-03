@@ -30,6 +30,7 @@ export const apiSlice = createApi({
                 body: credentials
             })
         }),
+
         register: builder.mutation<AuthResponse, RegisterRequest>({
             query: (credentials) => ({
                 url: '/auth/register',
@@ -37,6 +38,7 @@ export const apiSlice = createApi({
                 body: credentials
             })
         }),
+
         getClients: builder.query<Page<Client>, { page?: number; size?: number }>({
             query: ({page = 0, size = 20} = {}) =>
                 `/clients?page=${page}&size=${size}&sort=name,asc`,
