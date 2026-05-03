@@ -182,6 +182,14 @@ export const apiSlice = createApi({
                 {type: 'Invoice', id: invoiceId},
                 {type: 'Invoice', id: 'LIST'}
             ]
+        }),
+
+        downloadInvoicePdf: builder.query<Blob, string>({
+            query: (id) => ({
+                url: `/invoices/${id}/pdf`,
+                responseHandler: async (response) => response.blob(),
+                cache: 'no-cache'
+            })
         })
     })
 });
@@ -202,5 +210,6 @@ export const {
     useCancelInvoiceMutation,
     useMarkInvoicePaidMutation,
     useGetPaymentsQuery,
-    useRecordPaymentMutation
+    useRecordPaymentMutation,
+    useLazyDownloadInvoicePdfQuery
 } = apiSlice;

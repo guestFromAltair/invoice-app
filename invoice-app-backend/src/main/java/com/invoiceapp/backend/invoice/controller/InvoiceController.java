@@ -145,11 +145,9 @@ public class InvoiceController {
         UUID userId = userRepository.findByEmail(email).orElseThrow().getId();
 
         byte[] pdfBytes = pdfGenerationService.generateInvoicePdf(id, userId);
-
-        String filename = "invoice-" + id + ".pdf";
-
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + "invoice-" + id + ".pdf\"")
                 .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_PDF_VALUE)
                 .body(pdfBytes);
     }
