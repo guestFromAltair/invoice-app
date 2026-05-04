@@ -13,6 +13,7 @@ import {useState} from 'react';
 import {Button} from './ui/button';
 import {Separator} from './ui/separator';
 import {cn} from '../lib/utils';
+import {ThemeToggle} from './ThemeToggle';
 
 const navItems = [
     {to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard},
@@ -76,12 +77,15 @@ export default function Layout() {
 
                 <Separator/>
 
-                <div className="p-3">
-                    {sidebarOpen && (
-                        <p className="text-xs text-muted-foreground truncate px-1 mb-2">
-                            {user.email}
-                        </p>
-                    )}
+                <div className="p-3 space-y-1">
+                    <div className="flex items-center justify-between px-1">
+                        {sidebarOpen && (
+                            <p className="text-xs text-muted-foreground truncate">
+                                {user.email}
+                            </p>
+                        )}
+                        <ThemeToggle/>
+                    </div>
                     <Button
                         variant="ghost"
                         size={sidebarOpen ? 'sm' : 'icon'}
