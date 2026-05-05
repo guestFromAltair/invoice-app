@@ -5,7 +5,7 @@ import com.invoiceapp.backend.auth.domain.UserRepository;
 import com.invoiceapp.backend.client.domain.Client;
 import com.invoiceapp.backend.client.domain.ClientRepository;
 import com.invoiceapp.backend.invoice.domain.*;
-import com.invoiceapp.backend.notification.NotificationController;
+import com.invoiceapp.backend.notification.controller.NotificationController;
 import com.invoiceapp.backend.shared.exception.InvoiceAppException;
 import com.invoiceapp.backend.shared.metrics.InvoiceMetrics;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +17,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Year;
 import java.util.List;
@@ -29,6 +31,7 @@ import java.util.UUID;
 public class InvoiceService {
 
     private final InvoiceRepository invoiceRepository;
+    private final PaymentRepository paymentRepository;
     private final ClientRepository clientRepository;
     private final NotificationController notificationController;
     private final UserRepository userRepository;
@@ -77,7 +80,7 @@ public class InvoiceService {
             BigDecimal remainingBalance,
             String notes,
             List<LineItemResponse> lineItems,
-            String createdAt
+            Instant createdAt
     ) {}
 
     private User getCurrentUser() {
@@ -241,6 +244,24 @@ public class InvoiceService {
             );
         }
 
+        if (target == InvoiceStatus.PAID) {
+            BigDecimal alreadyPaid = paymentRepository.sumAmountByInvoiceId(invoice.getId());
+            BigDecimal remaining = invoice.getTotal()
+                    .subtract(alreadyPaid)
+                    .setScale(4, RoundingMode.HALF_UP);
+
+            if (remaining.compareTo(BigDecimal.ZERO) > 0) {
+                String noteText = String.format("Recorded automatically. Remaining amount of %s marked as paid manually.", remaining);
+                Payment compensatingPayment = Payment.builder()
+                        .invoice(invoice)
+                        .amount(remaining)
+                        .method("MANUAL_MARK_PAID")
+                        .notes(noteText)
+                        .build();
+                paymentRepository.save(compensatingPayment);
+            }
+        }
+
         invoice.setStatus(target);
 
         notificationController.sendStatusChange(invoice.getInvoiceNumber(), invoice.getId().toString(), target.name());
@@ -291,7 +312,7 @@ public class InvoiceService {
                 remaining,
                 invoice.getNotes(),
                 lineItemResponses,
-                invoice.getCreatedAt().toString()
+                invoice.getCreatedAt()
         );
     }
 

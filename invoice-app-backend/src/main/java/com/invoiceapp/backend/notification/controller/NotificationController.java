@@ -1,4 +1,4 @@
-package com.invoiceapp.backend.notification;
+package com.invoiceapp.backend.notification.controller;
 
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
