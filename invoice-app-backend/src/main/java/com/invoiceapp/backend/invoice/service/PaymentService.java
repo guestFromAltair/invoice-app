@@ -43,13 +43,11 @@ public class PaymentService {
             Instant paidAt,
             String method,
             String notes,
-            String createdAt
+            Instant createdAt
     ) {}
 
     private User getCurrentUser() {
-        String email = Objects.requireNonNull(
-                SecurityContextHolder.getContext().getAuthentication()
-        ).getName();
+        String email = Objects.requireNonNull(SecurityContextHolder.getContext().getAuthentication()).getName();
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new InvoiceAppException(
                         "Authenticated user not found",
@@ -144,7 +142,7 @@ public class PaymentService {
                 payment.getPaidAt(),
                 payment.getMethod(),
                 payment.getNotes(),
-                payment.getCreatedAt().toString()
+                payment.getCreatedAt()
         );
     }
 }
