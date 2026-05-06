@@ -6,6 +6,7 @@ import com.invoiceapp.backend.client.domain.Client;
 import com.invoiceapp.backend.client.domain.ClientRepository;
 import com.invoiceapp.backend.invoice.domain.*;
 import com.invoiceapp.backend.notification.controller.NotificationController;
+import com.invoiceapp.backend.notification.service.NotificationService;
 import com.invoiceapp.backend.shared.exception.InvoiceAppException;
 import com.invoiceapp.backend.shared.metrics.InvoiceMetrics;
 import lombok.RequiredArgsConstructor;
@@ -33,7 +34,7 @@ public class InvoiceService {
     private final InvoiceRepository invoiceRepository;
     private final PaymentRepository paymentRepository;
     private final ClientRepository clientRepository;
-    private final NotificationController notificationController;
+    private final NotificationService notificationService;
     private final UserRepository userRepository;
     private final InvoiceMetrics invoiceMetrics;
 
@@ -264,7 +265,7 @@ public class InvoiceService {
 
         invoice.setStatus(target);
 
-        notificationController.sendStatusChange(invoice.getInvoiceNumber(), invoice.getId().toString(), target.name());
+        notificationService.sendStatusChange(user.getId(), invoice.getInvoiceNumber(), invoice.getId().toString(), target.name());
 
         invoiceMetrics.recordStatusTransition(target);
         if (target == InvoiceStatus.SENT || target == InvoiceStatus.PAID || target == InvoiceStatus.CANCELLED) {

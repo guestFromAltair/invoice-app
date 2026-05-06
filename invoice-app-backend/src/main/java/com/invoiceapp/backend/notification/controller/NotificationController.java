@@ -1,46 +1,31 @@
 package com.invoiceapp.backend.notification.controller;
 
+import com.invoiceapp.backend.auth.domain.UserRepository;
+import com.invoiceapp.backend.notification.service.NotificationService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.Objects;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/notifications")
+@RequiredArgsConstructor
 public class NotificationController {
 
-    private final CopyOnWriteArrayList<SseEmitter> emitters = new CopyOnWriteArrayList<>();
+    private final NotificationService notificationService;
+    private final UserRepository userRepository;
 
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream() {
-        SseEmitter emitter = new SseEmitter(Long.MAX_VALUE);
+        String email = Objects.requireNonNull(SecurityContextHolder.getContext().getAuthentication()).getName();
+        UUID userId = userRepository.findByEmail(email).orElseThrow().getId();
 
-        emitters.add(emitter);
-
-        emitter.onCompletion(() -> emitters.remove(emitter));
-        emitter.onTimeout(() -> emitters.remove(emitter));
-        emitter.onError(e -> emitters.remove(emitter));
-
-        return emitter;
-    }
-
-    public void sendStatusChange(String invoiceNumber, String invoiceId, String newStatus) {
-        String data = String.format(
-                "{\"type\":\"STATUS_CHANGED\",\"invoiceId\":\"%s\"," +
-                        "\"invoiceNumber\":\"%s\",\"newStatus\":\"%s\"," +
-                        "\"message\":\"Invoice %s is now %s\"}",
-                invoiceId, invoiceNumber, newStatus, invoiceNumber, newStatus
-        );
-
-        emitters.forEach(emitter -> {
-            try {
-                emitter.send(SseEmitter.event().name("invoice-update").data(data));
-            } catch (Exception e) {
-                emitters.remove(emitter);
-            }
-        });
+        return notificationService.createConnection(userId);
     }
 }
