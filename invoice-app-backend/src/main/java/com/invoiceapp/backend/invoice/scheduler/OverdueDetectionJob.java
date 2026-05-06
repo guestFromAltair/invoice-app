@@ -30,13 +30,11 @@ public class OverdueDetectionJob {
             return;
         }
 
-        log.info("Overdue detection job: marking {} invoices as OVERDUE for {}",
-                overdueInvoices.size(), today);
+        log.info("Overdue detection job: marking {} invoices as OVERDUE for {}", overdueInvoices.size(), today);
 
         for (Invoice invoice : overdueInvoices) {
             invoice.setStatus(InvoiceStatus.OVERDUE);
-            log.info("Marked invoice {} ({}) as OVERDUE",
-                    invoice.getInvoiceNumber(), invoice.getId());
+            log.info("Marked invoice {} ({}) as OVERDUE", invoice.getInvoiceNumber(), invoice.getId());
         }
     }
 }

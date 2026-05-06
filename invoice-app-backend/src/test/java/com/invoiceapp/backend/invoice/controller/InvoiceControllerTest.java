@@ -1,6 +1,5 @@
 package com.invoiceapp.backend.invoice.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.invoiceapp.backend.auth.domain.UserRepository;
 import com.invoiceapp.backend.auth.service.JwtService;
 import com.invoiceapp.backend.invoice.domain.InvoiceStatus;

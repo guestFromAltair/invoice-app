@@ -13,6 +13,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -39,7 +40,7 @@ public class ClientService {
             String phone,
             String address,
             String vatNumber,
-            String createdAt
+            Instant createdAt
     ) {}
 
     private User getCurrentUser() {
@@ -129,7 +130,7 @@ public class ClientService {
                 client.getPhone(),
                 client.getAddress(),
                 client.getVatNumber(),
-                client.getCreatedAt().toString()
+                client.getCreatedAt()
         );
     }
 }
