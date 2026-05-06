@@ -6,6 +6,7 @@ import com.invoiceapp.backend.client.domain.Client;
 import com.invoiceapp.backend.client.domain.ClientRepository;
 import com.invoiceapp.backend.invoice.domain.*;
 import com.invoiceapp.backend.notification.controller.NotificationController;
+import com.invoiceapp.backend.notification.service.NotificationService;
 import com.invoiceapp.backend.shared.exception.InvoiceAppException;
 import com.invoiceapp.backend.shared.metrics.InvoiceMetrics;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,6 +48,8 @@ class InvoiceServiceTest {
     private InvoiceMetrics invoiceMetrics;
     @Mock
     private NotificationController notificationController;
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private InvoiceService invoiceService;
