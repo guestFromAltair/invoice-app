@@ -2,6 +2,7 @@ package com.invoiceapp.backend.notification.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -19,7 +20,7 @@ public class NotificationService {
     private final Map<UUID, CopyOnWriteArrayList<SseEmitter>> userEmitters = new ConcurrentHashMap<>();
 
     public SseEmitter createConnection(UUID userId) {
-        SseEmitter emitter = new SseEmitter(Long.MAX_VALUE);
+        SseEmitter emitter = new SseEmitter(120_000L);
 
         userEmitters.computeIfAbsent(userId, k -> new CopyOnWriteArrayList<>()).add(emitter);
 
@@ -36,6 +37,12 @@ public class NotificationService {
         emitter.onCompletion(removeEmitter);
         emitter.onTimeout(removeEmitter);
         emitter.onError(e -> removeEmitter.run());
+
+        try {
+            emitter.send(SseEmitter.event().name("init").data("connection-established"));
+        } catch (Exception e) {
+            removeEmitter.run();
+        }
 
         return emitter;
     }
@@ -57,6 +64,20 @@ public class NotificationService {
             } catch (Exception e) {
                 emitters.remove(emitter);
             }
+        });
+    }
+
+    @Scheduled(fixedRate = 15000)
+    public void sendHeartbeat() {
+        userEmitters.forEach((userId, emitters) -> {
+            emitters.forEach(emitter -> {
+                try {
+                    emitter.send(SseEmitter.event().comment("heartbeat"));
+                } catch (Exception e) {
+                    log.info("Heartbeat failed for user {}, removing emitter", userId);
+                    emitter.complete();
+                }
+            });
         });
     }
 }

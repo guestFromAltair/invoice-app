@@ -58,6 +58,19 @@ public class GlobalExceptionHandler {
         return detail;
     }
 
+    // Handle SSE Timeouts silently
+    @ExceptionHandler(org.springframework.web.context.request.async.AsyncRequestTimeoutException.class)
+    public void handleAsyncTimeout() {
+    }
+
+    // Handle Browser Tab closures silently
+    @ExceptionHandler(java.io.IOException.class)
+    public void handleIOException(java.io.IOException ex) {
+        if (ex.getMessage() != null && ex.getMessage().contains("Broken pipe")) {
+            return;
+        }
+    }
+
     // Catch-all exception
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleGenericException(Exception ex) {

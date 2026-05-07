@@ -1,5 +1,6 @@
 package com.invoiceapp.backend.notification.controller;
 
+import com.invoiceapp.backend.auth.domain.User;
 import com.invoiceapp.backend.auth.domain.UserRepository;
 import com.invoiceapp.backend.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +25,9 @@ public class NotificationController {
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream() {
         String email = Objects.requireNonNull(SecurityContextHolder.getContext().getAuthentication()).getName();
-        UUID userId = userRepository.findByEmail(email).orElseThrow().getId();
+        UUID userId = userRepository.findByEmail(email)
+                .map(User::getId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
         return notificationService.createConnection(userId);
     }

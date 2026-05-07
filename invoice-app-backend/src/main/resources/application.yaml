@@ -7,6 +7,8 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME:invoiceapp}
     password: ${SPRING_DATASOURCE_PASSWORD:invoiceapp}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      leak-detection-threshold: 2000
 
   jpa:
     hibernate:
@@ -16,6 +18,7 @@ spring:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
+    open-in-view: false
 
   flyway:
     enabled: true
