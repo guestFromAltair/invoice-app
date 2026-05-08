@@ -13,6 +13,8 @@ import InvoiceDetailPage from './pages/InvoiceDetailPage';
 import CreateInvoicePage from './pages/CreateInvoicePage';
 import Layout from './components/Layout';
 import React from "react";
+import LandingPage from "@/pages/LandingPage.tsx";
+import {Toaster} from "sonner";
 
 function ProtectedRoute({children}: { children: React.ReactNode }) {
     const isAuthenticated = useSelector(selectIsAuthenticated);
@@ -25,8 +27,8 @@ export default function App() {
     return (
         <>
             {isAuthenticated && <SseProvider/>}
-
             <Routes>
+                <Route path="/" element={<LandingPage/>}/>
                 <Route path="/login" element={<LoginPage/>}/>
                 <Route path="/register" element={<RegisterPage/>}/>
                 <Route
@@ -37,7 +39,6 @@ export default function App() {
                         </ProtectedRoute>
                     }
                 >
-                    <Route index element={<Navigate to="/dashboard" replace/>}/>
                     <Route path="dashboard" element={<DashboardPage/>}/>
                     <Route path="clients" element={<ClientsPage/>}/>
                     <Route path="clients/:id" element={<ClientDetailPage/>}/>
@@ -45,8 +46,9 @@ export default function App() {
                     <Route path="invoices/new" element={<CreateInvoicePage/>}/>
                     <Route path="invoices/:id" element={<InvoiceDetailPage/>}/>
                 </Route>
-                <Route path="*" element={<Navigate to="/dashboard" replace/>}/>
+                <Route path="*" element={<Navigate to="/" replace/>}/>
             </Routes>
+            <Toaster richColors position="top-right" />
         </>
     );
 }
