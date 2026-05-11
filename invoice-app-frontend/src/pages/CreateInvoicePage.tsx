@@ -22,6 +22,7 @@ import {
 import {Textarea} from '../components/ui/textarea';
 import {ArrowLeft, Plus, Trash2} from 'lucide-react';
 import {toast} from 'sonner';
+import {calcLineTotal} from "@/utils/calculations.ts";
 
 const lineItemSchema = z.object({
     description: z.string().min(1, 'Description is required'),
@@ -41,11 +42,6 @@ const invoiceSchema = z.object({
 });
 
 type InvoiceFormData = z.infer<typeof invoiceSchema>;
-
-const calcLineTotal = (qty: number, price: number, discount: number): number => {
-    if (!qty || !price) return 0;
-    return qty * price * (1 - (discount ?? 0));
-};
 
 const formatCurrency = (amount: number): string =>
     new Intl.NumberFormat('fr-FR', {style: 'currency', currency: 'EUR'})

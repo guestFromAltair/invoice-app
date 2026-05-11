@@ -21,22 +21,7 @@ import {
     TableRow
 } from '../components/ui/table';
 import {Plus, FileText, Calendar, Wallet} from 'lucide-react';
-
-const statusVariant: Record<InvoiceStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-    DRAFT: 'secondary',
-    SENT: 'default',
-    PAID: 'outline',
-    OVERDUE: 'destructive',
-    CANCELLED: 'secondary'
-};
-
-const statusLabel: Record<InvoiceStatus, string> = {
-    DRAFT: 'Draft',
-    SENT: 'Sent',
-    PAID: 'Paid',
-    OVERDUE: 'Overdue',
-    CANCELLED: 'Cancelled'
-};
+import {statusLabel, statusVariant} from "@/utils/invoiceStatus.ts";
 
 export default function InvoicesPage() {
     const navigate = useNavigate();
