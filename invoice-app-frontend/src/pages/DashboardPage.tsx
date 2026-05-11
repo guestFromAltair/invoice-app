@@ -77,15 +77,15 @@ export default function DashboardPage() {
     ];
 
     return (
-        <div className="space-y-8">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-                    <p className="text-muted-foreground mt-1">
-                        Welcome back, {user.email}
+        <div className="space-y-6 md:space-y-8 w-full max-w-full overflow-x-hidden p-1">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="min-w-0">
+                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight truncate">Dashboard</h1>
+                    <p className="text-muted-foreground text-sm mt-1 break-all sm:break-normal">
+                        Welcome back, {user?.email}
                     </p>
                 </div>
-                <Button onClick={() => navigate('/invoices/new')}>
+                <Button onClick={() => navigate('/invoices/new')} className="w-full sm:w-auto justify-center">
                     <Plus size={16} className="mr-2"/>
                     New Invoice
                 </Button>
@@ -93,8 +93,8 @@ export default function DashboardPage() {
 
             {outstandingBalance > 0 && (
                 <Card className="border-yellow-200 bg-yellow-50 dark:bg-yellow-950 dark:border-yellow-800">
-                    <CardContent className="flex items-center justify-between py-4">
-                        <div>
+                    <CardContent className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 py-4">
+                        <div className="space-y-1">
                             <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
                                 Outstanding balance
                             </p>
@@ -105,6 +105,7 @@ export default function DashboardPage() {
                         <Button
                             variant="outline"
                             size="sm"
+                            className="w-full sm:w-auto justify-center"
                             onClick={() => navigate('/invoices?status=SENT')}
                         >
                             View invoices
@@ -131,9 +132,9 @@ export default function DashboardPage() {
                 ))}
             </div>
 
-            <Card>
+            <Card className="w-full overflow-hidden">
                 <CardHeader className="flex flex-row items-center justify-between">
-                    <CardTitle>Recent invoices</CardTitle>
+                    <CardTitle className="text-lg sm:text-xl">Recent invoices</CardTitle>
                     <Button
                         variant="ghost"
                         size="sm"
@@ -157,8 +158,9 @@ export default function DashboardPage() {
                             </Button>
                         </div>
                     ) : (
-                        <table className="w-full text-sm">
-                            <thead>
+                        <div className="overflow-x-auto -mx-6 px-6">
+                            <table className="w-full min-w-150 text-sm">
+                                <thead>
                                 <tr className="border-b text-muted-foreground text-left">
                                     <th className="pb-2 font-medium">Number</th>
                                     <th className="pb-2 font-medium">Client</th>
@@ -166,33 +168,34 @@ export default function DashboardPage() {
                                     <th className="pb-2 font-medium text-right">Total</th>
                                     <th className="pb-2 font-medium text-right">Due</th>
                                 </tr>
-                            </thead>
-                            <tbody>
-                            {allInvoices.content.map((invoice: Invoice) => (
-                                <tr
-                                    key={invoice.id}
-                                    className="border-b last:border-0 cursor-pointer hover:bg-muted/50 transition-colors"
-                                    onClick={() => navigate(`/invoices/${invoice.id}`)}
-                                >
-                                    <td className="py-3 font-mono font-medium text-primary">
-                                        {invoice.invoiceNumber}
-                                    </td>
-                                    <td className="py-3">{invoice.clientName}</td>
-                                    <td className="py-3">
-                                        <Badge variant={statusVariant[invoice.status]}>
-                                            {invoice.status}
-                                        </Badge>
-                                    </td>
-                                    <td className="py-3 text-right font-medium">
-                                        {formatCurrency(invoice.total)}
-                                    </td>
-                                    <td className="py-3 text-right text-muted-foreground">
-                                        {invoice.dueDate}
-                                    </td>
-                                </tr>
-                            ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                {allInvoices.content.map((invoice: Invoice) => (
+                                    <tr
+                                        key={invoice.id}
+                                        className="border-b last:border-0 cursor-pointer hover:bg-muted/50 transition-colors"
+                                        onClick={() => navigate(`/invoices/${invoice.id}`)}
+                                    >
+                                        <td className="py-3 font-mono font-medium text-primary">
+                                            {invoice.invoiceNumber}
+                                        </td>
+                                        <td className="py-3">{invoice.clientName}</td>
+                                        <td className="py-3">
+                                            <Badge variant={statusVariant[invoice.status]}>
+                                                {invoice.status}
+                                            </Badge>
+                                        </td>
+                                        <td className="py-3 text-right font-medium">
+                                            {formatCurrency(invoice.total)}
+                                        </td>
+                                        <td className="py-3 text-right text-muted-foreground">
+                                            {invoice.dueDate}
+                                        </td>
+                                    </tr>
+                                ))}
+                                </tbody>
+                            </table>
+                        </div>
                     )}
                 </CardContent>
             </Card>

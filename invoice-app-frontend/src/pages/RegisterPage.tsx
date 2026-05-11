@@ -58,8 +58,8 @@ export default function RegisterPage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-background p-4">
-            <Card className="w-full max-w-sm">
+        <div className="min-h-screen flex items-center justify-center bg-background p-6">
+            <Card className="w-full max-w-sm border-neutral-200/80 dark:border-neutral-800/60 shadow-lg">
                 <CardHeader className="space-y-1">
                     <CardTitle className="text-2xl font-bold">Create account</CardTitle>
                     <CardDescription>
@@ -67,13 +67,14 @@ export default function RegisterPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                    <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
                         <div className="space-y-2">
                             <Label htmlFor="email">Email</Label>
                             <Input
                                 id="email"
                                 type="email"
                                 placeholder="you@example.com"
+                                className="h-11 px-3 focus-visible:ring-2"
                                 {...registerField('email')}
                             />
                             {errors.email && (
@@ -88,6 +89,7 @@ export default function RegisterPage() {
                             <Input
                                 id="password"
                                 type="password"
+                                className="h-11 px-3 focus-visible:ring-2"
                                 {...registerField('password')}
                             />
                             {errors.password && (
@@ -102,6 +104,7 @@ export default function RegisterPage() {
                             <Input
                                 id="confirmPassword"
                                 type="password"
+                                className="h-11 px-3 focus-visible:ring-2"
                                 {...registerField('confirmPassword')}
                             />
                             {errors.confirmPassword && (
@@ -111,7 +114,7 @@ export default function RegisterPage() {
                             )}
                         </div>
 
-                        <Button type="submit" className="w-full" disabled={isLoading}>
+                        <Button type="submit" className="w-full h-11 text-base mt-2" disabled={isLoading}>
                             {isLoading ? 'Creating account...' : 'Create account'}
                         </Button>
 

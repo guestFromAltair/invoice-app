@@ -26,6 +26,7 @@ export default function Layout() {
     const navigate = useNavigate();
     const user = useSelector(selectCurrentUser);
     const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [mobileOpen, setMobileOpen] = useState(false);
 
     const handleLogout = () => {
         dispatch(logout());
@@ -33,31 +34,48 @@ export default function Layout() {
     };
 
     return (
-        <div className="flex h-screen bg-background">
+        <div className="flex h-screen bg-background overflow-hidden">
+            {mobileOpen && (
+                <div
+                    className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden transition-opacity"
+                    onClick={() => setMobileOpen(false)}
+                />
+            )}
             <aside
                 className={cn(
-                    'flex flex-col border-r bg-card transition-all duration-200',
-                    sidebarOpen ? 'w-56' : 'w-14'
+                    'flex flex-col border-r bg-card transition-all duration-200 z-50 h-full shrink-0',
+                    'fixed inset-y-0 left-0 w-64 md:relative md:translate-x-0',
+                    mobileOpen ? 'translate-x-0' : '-translate-x-full',
+                    sidebarOpen ? 'md:w-56' : 'md:w-14'
                 )}
             >
-                <div className="flex items-center justify-between p-4">
-                    {sidebarOpen && (
-                        <span className="font-semibold text-primary">InvoiceApp</span>
-                    )}
+                <div className="flex items-center justify-between p-4 h-16">
+                    <span className={cn("font-semibold text-primary block", !sidebarOpen && "md:hidden")}>
+                        InvoiceApp
+                    </span>
                     <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => setSidebarOpen(!sidebarOpen)}
+                        className="hidden md:flex"
                     >
                         {sidebarOpen ? <X size={18}/> : <Menu size={18}/>}
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setMobileOpen(false)}
+                        className="md:hidden"
+                    >
+                        <X size={18}/>
                     </Button>
                 </div>
 
                 <Separator/>
 
-                <nav className="flex-1 p-2 space-y-1">
+                <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
                     {navItems.map(({to, label, icon: Icon}) => (
-                        <NavLink key={to} to={to}>
+                        <NavLink key={to} to={to} onClick={() => setMobileOpen(false)}>
                             {({isActive}) => (
                                 <div
                                     className={cn(
@@ -68,7 +86,9 @@ export default function Layout() {
                                     )}
                                 >
                                     <Icon size={18} className="shrink-0"/>
-                                    {sidebarOpen && <span>{label}</span>}
+                                    <span className={cn("block", !sidebarOpen && "md:hidden")}>
+                                        {label}
+                                    </span>
                                 </div>
                             )}
                         </NavLink>
@@ -77,12 +97,15 @@ export default function Layout() {
 
                 <Separator/>
 
-                <div className="p-3 space-y-1">
-                    <div className="flex items-center justify-between px-1">
-                        {sidebarOpen && (
-                            <p className="text-xs text-muted-foreground truncate">
+                <div className="p-3 space-y-2">
+                    <div className="flex items-center justify-between px-1 gap-2">
+                        {user?.email && (
+                            <span className={cn(
+                                "text-xs text-muted-foreground truncate block",
+                                !sidebarOpen && "md:hidden"
+                            )}>
                                 {user.email}
-                            </p>
+                            </span>
                         )}
                         <ThemeToggle/>
                     </div>
@@ -90,18 +113,35 @@ export default function Layout() {
                         variant="ghost"
                         size={sidebarOpen ? 'sm' : 'icon'}
                         onClick={handleLogout}
-                        className="w-full justify-start gap-2 text-muted-foreground"
+                        className={cn(
+                            "w-full justify-start gap-2 text-muted-foreground",
+                            !sidebarOpen && "md:justify-center md:px-0"
+                        )}
                     >
                         <LogOut size={16}/>
-                        {sidebarOpen && 'Logout'}
+                        <span className={cn("block", !sidebarOpen && "md:hidden")}>
+                            Logout
+                        </span>
                     </Button>
                 </div>
             </aside>
-            <main className="flex-1 overflow-auto">
-                <div className="container mx-auto p-6 max-w-6xl">
-                    <Outlet/>
-                </div>
-            </main>
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                <header className="flex items-center justify-between px-4 h-16 border-b bg-card md:hidden shrink-0">
+                    <span className="font-semibold text-primary">InvoiceApp</span>
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setMobileOpen(true)}
+                    >
+                        <Menu size={20}/>
+                    </Button>
+                </header>
+                <main className="flex-1 overflow-auto">
+                    <div className="container mx-auto p-4 md:p-6 max-w-6xl">
+                        <Outlet/>
+                    </div>
+                </main>
+            </div>
         </div>
     );
 }
