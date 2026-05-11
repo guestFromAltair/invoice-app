@@ -23,8 +23,8 @@ import {
 } from '../components/ui/table';
 import {ArrowLeft, Pencil, Check, X, Plus, Calendar, Wallet} from 'lucide-react';
 import {toast} from 'sonner';
-import type {InvoiceStatus} from '@/types';
 import {skipToken} from '@reduxjs/toolkit/query';
+import {statusVariant} from "@/utils/invoiceStatus.ts";
 
 const clientSchema = z.object({
     name: z.string().min(1, 'Name is required'),
@@ -35,14 +35,6 @@ const clientSchema = z.object({
 });
 
 type ClientFormData = z.infer<typeof clientSchema>;
-
-const statusVariant: Record<InvoiceStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-    DRAFT: 'secondary',
-    SENT: 'default',
-    PAID: 'outline',
-    OVERDUE: 'destructive',
-    CANCELLED: 'secondary'
-};
 
 const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('fr-FR', {style: 'currency', currency: 'EUR'})

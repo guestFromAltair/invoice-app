@@ -14,15 +14,8 @@ import {
     ArrowRight,
 } from 'lucide-react';
 
-import type {InvoiceStatus, Invoice} from '@/types';
-
-const statusVariant: Record<InvoiceStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-    DRAFT: 'secondary',
-    SENT: 'default',
-    PAID: 'outline',
-    OVERDUE: 'destructive',
-    CANCELLED: 'secondary',
-};
+import type {Invoice} from '@/types';
+import {statusVariant} from "@/utils/invoiceStatus.ts";
 
 const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('fr-FR', {

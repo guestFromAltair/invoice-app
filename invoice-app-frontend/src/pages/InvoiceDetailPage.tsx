@@ -14,16 +14,9 @@ import {Separator} from '../components/ui/separator';
 import {toast} from 'sonner';
 import {Download, Send, XCircle, CheckCircle, ArrowLeft} from 'lucide-react';
 import {PaymentDialog} from '../components/PaymentDialog';
-import type {InvoiceStatus, PaymentRequest} from '@/types';
+import type {PaymentRequest} from '@/types';
 import {skipToken} from '@reduxjs/toolkit/query';
-
-const statusVariant: Record<InvoiceStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-    DRAFT: 'secondary',
-    SENT: 'default',
-    PAID: 'outline',
-    OVERDUE: 'destructive',
-    CANCELLED: 'secondary'
-};
+import {statusVariant} from "@/utils/invoiceStatus.ts";
 
 export default function InvoiceDetailPage() {
     const navigate = useNavigate();
