@@ -42,22 +42,23 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-background p-4">
-            <Card className="w-full max-w-sm">
-                <CardHeader className="space-y-1">
+        <div className="min-h-screen flex items-center justify-center bg-background p-6">
+            <Card className="w-full max-w-sm border-neutral-800/60 dark:border-neutral-800/60 shadow-lg">
+                <CardHeader className="space-y-1.5">
                     <CardTitle className="text-2xl font-bold">Sign in</CardTitle>
                     <CardDescription>
                         Enter your email and password to access your account
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                    <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
                         <div className="space-y-2">
                             <Label htmlFor="email">Email</Label>
                             <Input
                                 id="email"
                                 type="email"
                                 placeholder="you@example.com"
+                                className="h-11 px-3 placeholder:text-muted-foreground/50 focus-visible:ring-2"
                                 {...register('email')}
                             />
                             {errors.email && (
@@ -72,6 +73,7 @@ export default function LoginPage() {
                             <Input
                                 id="password"
                                 type="password"
+                                className="h-11 px-3 focus-visible:ring-2"
                                 {...register('password')}
                             />
                             {errors.password && (
@@ -81,7 +83,7 @@ export default function LoginPage() {
                             )}
                         </div>
 
-                        <Button type="submit" className="w-full" disabled={isLoading}>
+                        <Button type="submit" className="w-full h-11 text-base mt-2" disabled={isLoading}>
                             {isLoading ? 'Signing in...' : 'Sign in'}
                         </Button>
 
