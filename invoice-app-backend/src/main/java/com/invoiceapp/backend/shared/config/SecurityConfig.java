@@ -2,6 +2,7 @@ package com.invoiceapp.backend.shared.config;
 
 import com.invoiceapp.backend.auth.service.JwtAuthenticationFilter;
 import com.invoiceapp.backend.auth.domain.UserRepository;
+import com.invoiceapp.backend.shared.idempotency.IdempotencyFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -38,7 +39,7 @@ public class SecurityConfig {
     private final UserRepository userRepository;
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, IdempotencyFilter idempotencyFilter ) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
@@ -53,7 +54,8 @@ public class SecurityConfig {
                                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authenticationProvider(authenticationProvider())
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(idempotencyFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
@@ -86,7 +88,7 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of(
                 "http://localhost:5173",  // Vite dev server
-                "https://my-app.vercel.app"  // Production — update before deploying
+                "https://my-app.vercel.app"  // TODO Production — update before deploying
         ));
 
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
