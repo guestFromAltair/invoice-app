@@ -1,8 +1,11 @@
 package com.invoiceapp.backend.shared.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.invoiceapp.backend.auth.service.JwtAuthenticationFilter;
 import com.invoiceapp.backend.auth.domain.UserRepository;
+import com.invoiceapp.backend.auth.service.JwtService;
 import com.invoiceapp.backend.shared.idempotency.IdempotencyFilter;
+import com.invoiceapp.backend.shared.idempotency.IdempotencyService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -35,23 +38,29 @@ import java.util.List;
 @EnableJpaAuditing
 @RequiredArgsConstructor
 public class SecurityConfig {
-    private final JwtAuthenticationFilter jwtAuthFilter;
+    private final JwtService jwtService;
     private final UserRepository userRepository;
 
+    private final IdempotencyService idempotencyService;
+    private final ObjectMapper objectMapper;
+
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, IdempotencyFilter idempotencyFilter ) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        JwtAuthenticationFilter jwtAuthFilter = new JwtAuthenticationFilter(jwtService, userRepository);
+        IdempotencyFilter idempotencyFilter = new IdempotencyFilter(idempotencyService, userRepository, objectMapper);
+
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> auth
-                                .requestMatchers("/api/auth/**").permitAll()
-                                .requestMatchers("/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
-                                .requestMatchers("/api/notifications/stream").permitAll()
-                                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                                .anyRequest().authenticated()
+                        .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
+                        .requestMatchers("/api/notifications/stream").permitAll()
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session
-                                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)

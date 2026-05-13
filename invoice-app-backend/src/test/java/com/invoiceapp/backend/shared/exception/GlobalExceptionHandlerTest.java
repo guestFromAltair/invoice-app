@@ -12,6 +12,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -83,5 +84,41 @@ class GlobalExceptionHandlerTest {
                 .doesNotContain("PSQLException")
                 .doesNotContain("postgresql")
                 .isEqualTo("An unexpected error occurred");
+    }
+
+    @Test
+    @DisplayName("should return 409 Conflict for DataIntegrityViolationException")
+    void should_handle_data_integrity_violation() {
+        org.springframework.dao.DataIntegrityViolationException ex =
+                new org.springframework.dao.DataIntegrityViolationException("Foreign key violation");
+
+        ProblemDetail detail = handler.handleDataIntegrity(ex);
+
+        assertThat(detail.getStatus()).isEqualTo(409);
+        assertThat(detail.getTitle()).isEqualTo("Data integrity violation");
+        assertThat(detail.getDetail()).contains("Ensure all related records are removed first.");
+    }
+
+    @Test
+    @DisplayName("should handle async request timeout silently")
+    void should_handle_async_timeout_silently() {
+        assertThatNoException().isThrownBy(handler::handleAsyncTimeout);
+    }
+
+    @Test
+    @DisplayName("should handle IOException branch where message contains Broken pipe")
+    void should_handle_io_exception_with_broken_pipe() {
+        java.io.IOException ex = new java.io.IOException("Write failed: Broken pipe");
+        assertThatNoException().isThrownBy(() -> handler.handleIOException(ex));
+    }
+
+    @Test
+    @DisplayName("should handle IOException branches where message is null or doesn't contain Broken pipe")
+    void should_handle_io_exception_other_scenarios() {
+        java.io.IOException nullMessageEx = new java.io.IOException((String) null);
+        assertThatNoException().isThrownBy(() -> handler.handleIOException(nullMessageEx));
+
+        java.io.IOException otherEx = new java.io.IOException("Connection refused");
+        assertThatNoException().isThrownBy(() -> handler.handleIOException(otherEx));
     }
 }

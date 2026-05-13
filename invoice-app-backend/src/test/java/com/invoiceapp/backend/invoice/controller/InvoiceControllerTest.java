@@ -1,5 +1,6 @@
 package com.invoiceapp.backend.invoice.controller;
 
+import com.invoiceapp.backend.auth.domain.User;
 import com.invoiceapp.backend.auth.domain.UserRepository;
 import com.invoiceapp.backend.auth.service.JwtService;
 import com.invoiceapp.backend.invoice.domain.InvoiceStatus;
@@ -10,6 +11,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -20,8 +23,10 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -120,6 +125,125 @@ class InvoiceControllerTest {
                 .andExpect(jsonPath("$.title").value("Validation failed"))
                 .andExpect(jsonPath("$.errors.clientId").exists())
                 .andExpect(jsonPath("$.errors.lineItems").exists());
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("GET /api/invoices should return 200 with page data")
+    void findAll_returns_200_with_page() throws Exception {
+        UUID clientId = UUID.randomUUID();
+        when(invoiceService.findAll(
+                        InvoiceStatus.DRAFT,
+                        clientId,
+                        org.springframework.data.domain.PageRequest.of(
+                                0,
+                                20,
+                                Sort.by(Sort.Direction.DESC, "createdAt"))
+                )
+        ).thenReturn(org.springframework.data.domain.Page.empty());
+
+        mockMvc.perform(get("/api/invoices")
+                        .param("status", "DRAFT")
+                        .param("clientId", clientId.toString()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("POST /api/invoices should return 201 when body is valid")
+    void create_invoice_returns_201_on_valid_payload() throws Exception {
+        UUID id = UUID.randomUUID();
+        InvoiceService.InvoiceResponse mockResponse = buildMockResponse(id);
+        String validBody = """
+                {
+                    "clientId": "%s",
+                    "issueDate": "2026-05-13",
+                    "dueDate": "2026-06-13",
+                    "taxRate": 0.20,
+                    "notes": "Valid invoice details",
+                    "lineItems": [
+                        {
+                            "description": "Item 1",
+                            "quantity": 2.0,
+                            "unitPrice": 100.0,
+                            "discountPct": 0.0,
+                            "position": 1
+                        }
+                    ]
+                }
+                """.formatted(UUID.randomUUID());
+
+        when(invoiceService.create(any(InvoiceService.InvoiceRequest.class))).thenReturn(mockResponse);
+
+        mockMvc.perform(post("/api/invoices")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(id.toString()));
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("PUT /api/invoices/{id}/line-items should return 200 on successful collection update")
+    void updateLineItems_returns_200() throws Exception {
+        UUID id = UUID.randomUUID();
+        String listPayload = """
+                [
+                    {
+                        "description": "Consulting Work",
+                        "quantity": 10,
+                        "unitPrice": 150.00,
+                        "discountPct": 0.1,
+                        "position": 0
+                    }
+                ]
+                """;
+
+        when(invoiceService.updateLineItems(eq(id), anyList())).thenReturn(buildMockResponse(id));
+
+        mockMvc.perform(put("/api/invoices/{id}/line-items", id)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(listPayload))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("POST state trigger routes should map successfully to service backends")
+    void state_transitions_return_200() throws Exception {
+        UUID id = UUID.randomUUID();
+        InvoiceService.InvoiceResponse mockResponse = buildMockResponse(id);
+
+        when(invoiceService.cancel(id)).thenReturn(mockResponse);
+        when(invoiceService.markPaid(id)).thenReturn(mockResponse);
+
+        mockMvc.perform(post("/api/invoices/{id}/cancel", id).with(csrf())).andExpect(status().isOk());
+        mockMvc.perform(post("/api/invoices/{id}/mark-paid", id).with(csrf())).andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(username = "exporter@example.com")
+    @DisplayName("GET /api/invoices/{id}/pdf should correctly serve binary stream outputs")
+    void downloadPdf_returns_binary_stream() throws Exception {
+        UUID invoiceId = UUID.randomUUID();
+        UUID mockUserId = UUID.randomUUID();
+        User mockUser = User.builder()
+                .id(mockUserId)
+                .email("exporter@example.com")
+                .build();
+
+        byte[] samplePdfContent = "%PDF-1.4 mock content bytes".getBytes();
+
+        when(userRepository.findByEmail("exporter@example.com")).thenReturn(Optional.of(mockUser));
+        when(pdfGenerationService.generateInvoicePdf(invoiceId, mockUserId)).thenReturn(samplePdfContent);
+
+        mockMvc.perform(get("/api/invoices/{id}/pdf", invoiceId))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"invoice-" + invoiceId + ".pdf\""))
+                .andExpect(header().string(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_PDF_VALUE))
+                .andExpect(content().bytes(samplePdfContent));
     }
 
     private InvoiceService.InvoiceResponse buildMockResponse(UUID id) {

@@ -13,14 +13,12 @@ import org.jspecify.annotations.NonNull;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.ContentCachingResponseWrapper;
 
 import java.io.IOException;
 import java.util.UUID;
 
-@Component
 @RequiredArgsConstructor
 @Slf4j
 public class IdempotencyFilter extends OncePerRequestFilter {
