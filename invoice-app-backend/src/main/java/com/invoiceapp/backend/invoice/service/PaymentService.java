@@ -1,4 +1,3 @@
-// src/main/java/com/invoiceapp/backend/invoice/service/PaymentService.java
 package com.invoiceapp.backend.invoice.service;
 
 import com.invoiceapp.backend.auth.domain.User;

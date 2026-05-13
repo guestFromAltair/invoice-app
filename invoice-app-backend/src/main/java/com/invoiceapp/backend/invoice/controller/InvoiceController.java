@@ -37,8 +37,7 @@ public class InvoiceController {
     public Page<InvoiceService.InvoiceResponse> findAll(
             @RequestParam(required = false) InvoiceStatus status,
             @RequestParam(required = false) UUID clientId,
-            @PageableDefault(size = 20, sort = "createdAt",
-                    direction = Sort.Direction.DESC) Pageable pageable
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         return invoiceService.findAll(status, clientId, pageable);
     }
