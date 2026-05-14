@@ -1,6 +1,6 @@
 package com.invoiceapp.backend.shared.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.invoiceapp.backend.auth.service.JwtAuthenticationFilter;
 import com.invoiceapp.backend.auth.domain.UserRepository;
 import com.invoiceapp.backend.auth.service.JwtService;
@@ -42,12 +42,12 @@ public class SecurityConfig {
     private final UserRepository userRepository;
 
     private final IdempotencyService idempotencyService;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         JwtAuthenticationFilter jwtAuthFilter = new JwtAuthenticationFilter(jwtService, userRepository);
-        IdempotencyFilter idempotencyFilter = new IdempotencyFilter(idempotencyService, userRepository, objectMapper);
+        IdempotencyFilter idempotencyFilter = new IdempotencyFilter(idempotencyService, userRepository, jsonMapper);
 
         http
                 .csrf(AbstractHttpConfigurer::disable)

@@ -1,6 +1,6 @@
 package com.invoiceapp.backend.shared.idempotency;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.invoiceapp.backend.auth.domain.User;
 import com.invoiceapp.backend.auth.domain.UserRepository;
 import jakarta.servlet.FilterChain;
@@ -29,7 +29,7 @@ public class IdempotencyFilter extends OncePerRequestFilter {
 
     private final IdempotencyService idempotencyService;
     private final UserRepository userRepository;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     @Override
     protected void doFilterInternal(
@@ -64,7 +64,7 @@ public class IdempotencyFilter extends OncePerRequestFilter {
             response.setStatus(stored.status());
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             response.setHeader("Idempotency-Replayed", "true");
-            objectMapper.writeValue(response.getWriter(), stored.body());
+            jsonMapper.writeValue(response.getWriter(), stored.body());
             return;
         }
 
@@ -84,7 +84,7 @@ public class IdempotencyFilter extends OncePerRequestFilter {
             byte[] responseBody = responseWrapper.getContentAsByteArray();
 
             if (status < 500 && responseBody.length > 0) {
-                Object parsedBody = objectMapper.readValue(responseBody, Object.class);
+                Object parsedBody = jsonMapper.readValue(responseBody, Object.class);
                 idempotencyService.commitResponse(idempotencyKey, userId, requestPath, status, parsedBody);
                 committed = true;
             }
@@ -110,7 +110,7 @@ public class IdempotencyFilter extends OncePerRequestFilter {
         response.setStatus(status.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         Map<String, String> errorDetails = Map.of("title", status.getReasonPhrase(), "detail", message);
-        objectMapper.writeValue(response.getWriter(), errorDetails);
+        jsonMapper.writeValue(response.getWriter(), errorDetails);
     }
 
     private UUID resolveUserId() {

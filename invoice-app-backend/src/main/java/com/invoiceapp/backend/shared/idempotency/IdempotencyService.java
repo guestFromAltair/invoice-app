@@ -1,6 +1,6 @@
 package com.invoiceapp.backend.shared.idempotency;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.invoiceapp.backend.shared.metrics.InvoiceMetrics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,7 +19,7 @@ import java.util.UUID;
 public class IdempotencyService {
 
     private final IdempotencyKeyRepository repository;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
     private final InvoiceMetrics invoiceMetrics;
 
     public Optional<StoredResponse> findExistingResponse(String idempotencyKey, UUID userId, String requestPath) {
@@ -33,7 +33,7 @@ public class IdempotencyService {
                         }
                         return new StoredResponse(
                                 key.getResponseStatus(),
-                                objectMapper.readTree(key.getResponseBody())
+                                jsonMapper.readTree(key.getResponseBody())
                         );
                     } catch (Exception e) {
                         log.error("Failed to deserialize stored idempotency response", e);
@@ -82,7 +82,7 @@ public class IdempotencyService {
             Object responseBody
     ) {
         try {
-            String serializedBody = objectMapper.writeValueAsString(responseBody);
+            String serializedBody = jsonMapper.writeValueAsString(responseBody);
             repository.findByIdempotencyKeyAndUserIdAndRequestPath(idempotencyKey, userId, requestPath)
                     .ifPresentOrElse(record -> {
                         record.setResponseStatus(responseStatus);
