@@ -1,14 +1,12 @@
 package com.invoiceapp.backend.shared.idempotency;
 
+import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.invoiceapp.backend.auth.domain.User;
 import com.invoiceapp.backend.auth.domain.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletResponse;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -29,17 +27,19 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 @DisplayName("IdempotencyFilter")
 class IdempotencyFilterTest {
+
     @Mock
     private IdempotencyService idempotencyService;
     @Mock
     private UserRepository userRepository;
+
+    @Spy
+    private ObjectMapper objectMapper = new ObjectMapper();
+
     @Mock
     private FilterChain filterChain;
     @Mock
     private Authentication authentication;
-
-    @Spy
-    private ObjectMapper objectMapper = new ObjectMapper();
 
     @InjectMocks
     private IdempotencyFilter idempotencyFilter;
@@ -95,6 +95,62 @@ class IdempotencyFilterTest {
     }
 
     @Test
+    @DisplayName("Should return 409 Conflict when request transaction state is PENDING")
+    void shouldBlockConcurrentRequestsWith409() throws Exception {
+        UUID userId = UUID.randomUUID();
+        request.setMethod("POST");
+        request.setRequestURI("/api/invoices/payment");
+        request.addHeader("Idempotency-Key", "lock-key");
+
+        when(authentication.isAuthenticated()).thenReturn(true);
+        when(authentication.getName()).thenReturn("payer@example.com");
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        User mockUser = User.builder().id(userId).email("payer@example.com").build();
+        when(userRepository.findByEmail("payer@example.com")).thenReturn(Optional.of(mockUser));
+
+        IdempotencyService.StoredResponse pendingResponse = new IdempotencyService.StoredResponse(202, null);
+        when(idempotencyService.findExistingResponse("lock-key", userId, "/api/invoices/payment"))
+                .thenReturn(Optional.of(pendingResponse));
+
+        idempotencyFilter.doFilterInternal(request, response, filterChain);
+
+        verifyNoInteractions(filterChain);
+        assertThat(response.getStatus()).isEqualTo(409);
+    }
+
+    @Test
+    @DisplayName("Should return 409 Conflict when tryLock acquisition returns false")
+    void shouldHandleFailedLockAcquisition() throws Exception {
+        UUID userId = UUID.randomUUID();
+        request.setMethod("POST");
+        request.setRequestURI("/api/invoices/payment");
+        request.addHeader("Idempotency-Key", "race-key");
+
+        when(authentication.isAuthenticated()).thenReturn(true);
+        when(authentication.getName()).thenReturn("payer@example.com");
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        User mockUser = User.builder().id(userId).email("payer@example.com").build();
+        when(userRepository.findByEmail("payer@example.com")).thenReturn(Optional.of(mockUser));
+
+        when(idempotencyService.findExistingResponse(
+                "race-key",
+                userId,
+                "/api/invoices/payment"
+        )).thenReturn(Optional.empty());
+        when(idempotencyService.tryLock(
+                "race-key",
+                userId,
+                "/api/invoices/payment"
+        )).thenReturn(false);
+
+        idempotencyFilter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(409);
+    }
+
+    @Test
     @DisplayName("Should replay response when existing idempotent transaction is found")
     void shouldReplayStoredResponse() throws Exception {
         UUID userId = UUID.randomUUID();
@@ -137,8 +193,16 @@ class IdempotencyFilterTest {
 
         User mockUser = User.builder().id(userId).email("owner@example.com").build();
         when(userRepository.findByEmail("owner@example.com")).thenReturn(Optional.of(mockUser));
-        when(idempotencyService.findExistingResponse("fresh-key", userId, "/api/invoices"))
-                .thenReturn(Optional.empty());
+        when(idempotencyService.findExistingResponse(
+                "fresh-key",
+                userId,
+                "/api/invoices"
+        )).thenReturn(Optional.empty());
+        when(idempotencyService.tryLock(
+                "fresh-key",
+                userId,
+                "/api/invoices"
+        )).thenReturn(true);
 
         doAnswer(invocation -> {
             HttpServletResponse chainResponse = invocation.getArgument(1);
@@ -149,40 +213,15 @@ class IdempotencyFilterTest {
 
         idempotencyFilter.doFilterInternal(request, response, filterChain);
 
-        verify(idempotencyService).storeResponse(
+        verify(idempotencyService).commitResponse(
                 eq("fresh-key"), eq(userId), eq("/api/invoices"),
                 eq(201), any()
         );
     }
 
     @Test
-    @DisplayName("Should skip storage logic if downstream action returns a 500 error state")
-    void shouldIgnoreServerErrorsFromStorage() throws Exception {
-        UUID userId = UUID.randomUUID();
-        request.setMethod("POST");
-        request.addHeader("Idempotency-Key", "error-key");
-
-        when(authentication.isAuthenticated()).thenReturn(true);
-        when(authentication.getName()).thenReturn("owner@example.com");
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-        when(userRepository.findByEmail("owner@example.com")).thenReturn(Optional.of(User.builder().id(userId).build()));
-        when(idempotencyService.findExistingResponse("error-key", userId, "")).thenReturn(Optional.empty());
-
-        doAnswer(invocation -> {
-            HttpServletResponse chainResponse = invocation.getArgument(1);
-            chainResponse.setStatus(500);
-            chainResponse.getWriter().write("{\"error\":\"Internal DB Fail\"}");
-            return null;
-        }).when(filterChain).doFilter(eq(request), any());
-
-        idempotencyFilter.doFilterInternal(request, response, filterChain);
-
-        verify(idempotencyService, times(0)).storeResponse(any(), any(), any(), anyInt(), any());
-    }
-
-    @Test
-    @DisplayName("Should gracefully catch and log Jackson read validation exceptions")
-    void shouldCatchParsingExceptionsGracefully() throws Exception {
+    @DisplayName("Should preserve lock row with fallback text map if response parsing encounters exceptions")
+    void shouldCommitFallbackReceiptOnSerializationCrash() throws Exception {
         UUID userId = UUID.randomUUID();
         request.setMethod("POST");
         request.addHeader("Idempotency-Key", "malformed-key");
@@ -192,6 +231,7 @@ class IdempotencyFilterTest {
         SecurityContextHolder.getContext().setAuthentication(authentication);
         when(userRepository.findByEmail("owner@example.com")).thenReturn(Optional.of(User.builder().id(userId).build()));
         when(idempotencyService.findExistingResponse("malformed-key", userId, "")).thenReturn(Optional.empty());
+        when(idempotencyService.tryLock("malformed-key", userId, "")).thenReturn(true);
 
         doAnswer(invocation -> {
             HttpServletResponse chainResponse = invocation.getArgument(1);
@@ -200,9 +240,16 @@ class IdempotencyFilterTest {
             return null;
         }).when(filterChain).doFilter(eq(request), any());
 
-        // Ensure filter absorbs Jackson parsing problems without throwing a runtime break
-        idempotencyFilter.doFilterInternal(request, response, filterChain);
+        Assertions.assertThrows(JsonParseException.class, () -> {
+            idempotencyFilter.doFilterInternal(request, response, filterChain);
+        });
 
-        verify(idempotencyService, times(0)).storeResponse(any(), any(), any(), anyInt(), any());
+        verify(idempotencyService).commitResponse(
+                eq("malformed-key"),
+                eq(userId),
+                eq(""),
+                anyInt(),
+                any(Map.class)
+        );
     }
 }

@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 @Component
 @RequiredArgsConstructor
@@ -16,8 +17,11 @@ public class IdempotencyCleanupJob {
 
     @Scheduled(cron = "0 0 3 * * *")
     @Transactional
-    public void cleanupExpiredKeys() {
-        repository.deleteExpiredKeys(Instant.now());
-        log.info("Idempotency key cleanup completed");
+    public void cleanupKeys() {
+        Instant now = Instant.now();
+        Instant thirtyMinutesAgo = now.minus(30, ChronoUnit.MINUTES);
+
+        repository.deleteExpiredOrStaleKeys(now, thirtyMinutesAgo);
+        log.info("Cleanup completed: removed expired keys and stale locks.");
     }
 }

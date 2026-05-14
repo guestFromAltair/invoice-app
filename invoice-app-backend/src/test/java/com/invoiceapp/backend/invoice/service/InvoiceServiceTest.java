@@ -17,6 +17,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -250,6 +253,84 @@ class InvoiceServiceTest {
             assertThatThrownBy(() -> invoiceService.create(request))
                     .isInstanceOf(InvoiceAppException.class)
                     .hasMessageContaining("Due date cannot be before issue date");
+        }
+    }
+
+    @Nested
+    @DisplayName("invoice retrieval")
+    class Retrieval {
+
+        @Test
+        @DisplayName("should find all invoices with filters")
+        void should_find_all_invoices() {
+            Invoice invoice = buildInvoice(InvoiceStatus.DRAFT);
+            Page<Invoice> page = new PageImpl<>(List.of(invoice));
+
+            when(invoiceRepository.findAllByFilters(eq(userId), any(), any(), any())).thenReturn(page);
+
+            var result = invoiceService.findAll(InvoiceStatus.DRAFT, clientId, Pageable.unpaged());
+
+            assertThat(result.getContent()).hasSize(1);
+            assertThat(result.getContent().getFirst().invoiceNumber()).isEqualTo(invoice.getInvoiceNumber());
+        }
+
+        @Test
+        @DisplayName("should find invoice by id")
+        void should_find_by_id() {
+            Invoice invoice = buildInvoice(InvoiceStatus.DRAFT);
+            when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
+
+            var result = invoiceService.findById(invoice.getId());
+
+            assertThat(result.id()).isEqualTo(invoice.getId());
+        }
+    }
+
+    @Test
+    @DisplayName("should cancel invoice successfully")
+    void should_cancel_invoice() {
+        Invoice invoice = buildInvoice(InvoiceStatus.DRAFT);
+        when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
+        when(invoiceRepository.computeOutstandingBalance()).thenReturn(BigDecimal.ZERO);
+
+        var response = invoiceService.cancel(invoice.getId());
+
+        assertThat(response.status()).isEqualTo(InvoiceStatus.CANCELLED);
+        verify(invoiceMetrics).recordStatusTransition(InvoiceStatus.CANCELLED);
+    }
+
+    @Nested
+    @DisplayName("invoice modifications")
+    class Modifications {
+
+        @Test
+        @DisplayName("should update line items for DRAFT invoice")
+        void should_update_line_items() {
+            Invoice invoice = buildInvoice(InvoiceStatus.DRAFT);
+            invoice.getLineItems().add(new LineItem());
+
+            when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
+
+            List<InvoiceService.LineItemRequest> newItems = List.of(
+                    new InvoiceService.LineItemRequest("New Item", BigDecimal.ONE, BigDecimal.TEN, BigDecimal.ZERO, 1)
+            );
+
+            var response = invoiceService.updateLineItems(invoice.getId(), newItems);
+
+            assertThat(response.lineItems()).hasSize(1);
+            assertThat(response.lineItems().getFirst().description()).isEqualTo("New Item");
+            verify(invoiceRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("should throw when updating non-DRAFT invoice")
+        void should_throw_when_updating_sent_invoice() {
+            Invoice invoice = buildInvoice(InvoiceStatus.SENT);
+            when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
+
+            assertThatThrownBy(() -> invoiceService.updateLineItems(invoice.getId(), List.of()))
+                    .isInstanceOf(InvoiceAppException.class)
+                    .hasMessageContaining("Only DRAFT invoices can be edited");
         }
     }
 

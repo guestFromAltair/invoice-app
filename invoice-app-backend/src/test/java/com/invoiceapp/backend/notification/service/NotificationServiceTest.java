@@ -76,14 +76,38 @@ class NotificationServiceTest {
         UUID user1 = UUID.randomUUID();
         UUID user2 = UUID.randomUUID();
 
-        // Establish a healthy subscriber
         notificationService.createConnection(user1);
 
-        // Establish a dead subscriber that has timed out / disconnected
         SseEmitter deadEmitter = notificationService.createConnection(user2);
-        deadEmitter.complete(); // Dead state
+        deadEmitter.complete();
 
-        // Execute scheduled heartbeat sweep
         assertThatNoException().isThrownBy(() -> notificationService.sendHeartbeat());
+    }
+
+    @Test
+    @DisplayName("cleanupEmitter should remove user from map entirely if no emitters remain")
+    void cleanupEmitter_removesUserWhenEmpty() {
+        UUID userId = UUID.randomUUID();
+        SseEmitter emitter = notificationService.createConnection(userId);
+
+        notificationService.cleanupEmitter(userId, emitter);
+
+        assertThatNoException().isThrownBy(() ->
+                notificationService.sendStatusChange(userId, "INV-1", "ID-1", "PAID")
+        );
+    }
+
+    @Test
+    @DisplayName("cleanupEmitter should not remove user if other emitters are still active")
+    void cleanupEmitter_keepsUserIfOthersExist() {
+        UUID userId = UUID.randomUUID();
+        SseEmitter emitter1 = notificationService.createConnection(userId);
+        SseEmitter emitter2 = notificationService.createConnection(userId);
+
+        notificationService.cleanupEmitter(userId, emitter1);
+
+        assertThatNoException().isThrownBy(() ->
+                notificationService.sendStatusChange(userId, "INV-1", "ID-1", "PAID")
+        );
     }
 }

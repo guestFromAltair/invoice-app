@@ -18,6 +18,7 @@ public class InvoiceMetrics {
     private final Counter invoicesSentCounter;
     private final Counter invoicesPaidCounter;
     private final Counter invoicesCancelledCounter;
+    private final Counter idempotencyCommitFailures;
 
     private final AtomicReference<Double> outstandingBalance = new AtomicReference<>(0.0);
 
@@ -42,6 +43,13 @@ public class InvoiceMetrics {
                 .tag("to_status", "CANCELLED")
                 .register(registry);
 
+        this.idempotencyCommitFailures = Counter.builder("idempotency.errors")
+                .description("Total failures when committing idempotency responses")
+                .tag("reason", "commit_failure")
+                .register(registry);
+
+        log.info("Invoice metrics registered successfully");
+
         Gauge.builder("invoices.outstanding.balance", outstandingBalance, AtomicReference::get)
                 .description("Total outstanding invoice balance")
                 .tag("currency", "EUR")
@@ -61,6 +69,10 @@ public class InvoiceMetrics {
             case CANCELLED -> invoicesCancelledCounter.increment();
             default        -> {}
         }
+    }
+
+    public void recordIdempotencyCommitFailure() {
+        idempotencyCommitFailures.increment();
     }
 
     public void updateOutstandingBalance(double balance) {

@@ -2,6 +2,7 @@ package com.invoiceapp.backend.notification.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jetbrains.annotations.VisibleForTesting;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -24,27 +25,28 @@ public class NotificationService {
 
         userEmitters.computeIfAbsent(userId, k -> new CopyOnWriteArrayList<>()).add(emitter);
 
-        Runnable removeEmitter = () -> {
-            List<SseEmitter> emitters = userEmitters.get(userId);
-            if (emitters != null) {
-                emitters.remove(emitter);
-                if (emitters.isEmpty()) {
-                    userEmitters.remove(userId);
-                }
-            }
-        };
-
-        emitter.onCompletion(removeEmitter);
-        emitter.onTimeout(removeEmitter);
-        emitter.onError(e -> removeEmitter.run());
+        emitter.onCompletion(() -> cleanupEmitter(userId, emitter));
+        emitter.onTimeout(() -> cleanupEmitter(userId, emitter));
+        emitter.onError(e -> cleanupEmitter(userId, emitter));
 
         try {
             emitter.send(SseEmitter.event().name("init").data("connection-established"));
         } catch (Exception e) {
-            removeEmitter.run();
+            cleanupEmitter(userId, emitter);
         }
 
         return emitter;
+    }
+
+    @VisibleForTesting
+    void cleanupEmitter(UUID userId, SseEmitter emitter) {
+        List<SseEmitter> emitters = userEmitters.get(userId);
+        if (emitters != null) {
+            emitters.remove(emitter);
+            if (emitters.isEmpty()) {
+                userEmitters.remove(userId);
+            }
+        }
     }
 
     public void sendStatusChange(UUID userId, String invoiceNumber, String invoiceId, String newStatus) {
