@@ -217,11 +217,6 @@ public class InvoiceService {
     }
 
     @Transactional
-    public InvoiceResponse markOverdue(UUID id) {
-        return transition(id, InvoiceStatus.OVERDUE);
-    }
-
-    @Transactional
     public InvoiceResponse markPaid(UUID id) {
         return transition(id, InvoiceStatus.PAID);
     }

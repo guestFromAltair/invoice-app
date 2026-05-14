@@ -11,12 +11,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.ContentCachingResponseWrapper;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.UUID;
 
 @RequiredArgsConstructor
@@ -52,9 +54,13 @@ public class IdempotencyFilter extends OncePerRequestFilter {
         var existingResponse = idempotencyService.findExistingResponse(idempotencyKey, userId, requestPath);
         if (existingResponse.isPresent()) {
             IdempotencyService.StoredResponse stored = existingResponse.get();
+            if (stored.status() == HttpStatus.ACCEPTED.value()) {
+                log.warn("Concurrent idempotent request intercepted. Key: {} is still processing.", idempotencyKey);
+                sendErrorResponse(response, HttpStatus.CONFLICT, "Request is already being processed. Please wait.");
+                return;
+            }
 
             log.info("Replaying idempotent response for key: {} path: {}", idempotencyKey, requestPath);
-
             response.setStatus(stored.status());
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             response.setHeader("Idempotency-Replayed", "true");
@@ -62,27 +68,49 @@ public class IdempotencyFilter extends OncePerRequestFilter {
             return;
         }
 
-        ContentCachingResponseWrapper responseWrapper = new ContentCachingResponseWrapper(response);
-
-        filterChain.doFilter(request, responseWrapper);
-
-        int status = responseWrapper.getStatus();
-        byte[] responseBody = responseWrapper.getContentAsByteArray();
-        if (responseBody.length > 0) {
-            try {
-                Object parsedBody = objectMapper.readValue(responseBody, Object.class);
-                if (status < 500) {
-                    idempotencyService.storeResponse(
-                            idempotencyKey, userId, requestPath,
-                            status, parsedBody
-                    );
-                }
-            } catch (Exception e) {
-                log.warn("Could not parse response body for idempotency storage", e);
-            }
+        boolean lockAcquired = idempotencyService.tryLock(idempotencyKey, userId, requestPath);
+        if (!lockAcquired) {
+            sendErrorResponse(response, HttpStatus.CONFLICT, "Duplicate request detected.");
+            return;
         }
 
-        responseWrapper.copyBodyToResponse();
+        ContentCachingResponseWrapper responseWrapper = new ContentCachingResponseWrapper(response);
+        boolean committed = false;
+
+        try {
+            filterChain.doFilter(request, responseWrapper);
+
+            int status = responseWrapper.getStatus();
+            byte[] responseBody = responseWrapper.getContentAsByteArray();
+
+            if (status < 500 && responseBody.length > 0) {
+                Object parsedBody = objectMapper.readValue(responseBody, Object.class);
+                idempotencyService.commitResponse(idempotencyKey, userId, requestPath, status, parsedBody);
+                committed = true;
+            }
+        } catch (Exception filterEx) {
+            log.error("Execution crashed. Committing error state.", filterEx);
+            idempotencyService.commitResponse(idempotencyKey, userId, requestPath, 500, Map.of("error", "System crash"));
+            committed = true;
+            throw filterEx;
+        } finally {
+            // If 'committed' is still false, it means something bad happened. We must resolve the lock
+            if (!committed) {
+                log.warn("CRITICAL: Request ended without formal commit. Releasing hanging lock for key: {}", idempotencyKey);
+                idempotencyService.commitResponse(
+                        idempotencyKey, userId, requestPath,
+                        500, Map.of("error", "Transaction terminated unexpectedly")
+                );
+            }
+            responseWrapper.copyBodyToResponse();
+        }
+    }
+
+    private void sendErrorResponse(HttpServletResponse response, HttpStatus status, String message) throws IOException {
+        response.setStatus(status.value());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        Map<String, String> errorDetails = Map.of("title", status.getReasonPhrase(), "detail", message);
+        objectMapper.writeValue(response.getWriter(), errorDetails);
     }
 
     private UUID resolveUserId() {

@@ -16,6 +16,7 @@ public interface IdempotencyKeyRepository extends JpaRepository<IdempotencyKey, 
     );
 
     @Modifying
-    @Query("DELETE FROM IdempotencyKey i WHERE i.expiresAt < :now")
-    void deleteExpiredKeys(Instant now);
+    @Query("DELETE FROM IdempotencyKey i WHERE i.expiresAt < :now " +
+            "OR (i.responseStatus = 202 AND i.createdAt < :staleTime)")
+    void deleteExpiredOrStaleKeys(Instant now, Instant staleTime);
 }
