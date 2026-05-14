@@ -1,7 +1,7 @@
 package com.invoiceapp.backend.shared.idempotency;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 import com.invoiceapp.backend.shared.metrics.InvoiceMetrics;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,7 +27,7 @@ class IdempotencyServiceTest {
     private IdempotencyKeyRepository repository;
 
     @Mock
-    private ObjectMapper objectMapper;
+    private JsonMapper jsonMapper;
 
     @Mock
     private InvoiceMetrics invoiceMetrics;
@@ -60,27 +60,31 @@ class IdempotencyServiceTest {
         assertThat(result).isPresent();
         assertThat(result.get().status()).isEqualTo(202);
         assertThat(result.get().body()).isNull();
-        verifyNoInteractions(objectMapper);
+        verifyNoInteractions(jsonMapper);
     }
 
     @Test
     @DisplayName("should return parsed body when record is completed and not expired")
     void findExistingResponse_Completed() throws Exception {
+        String rawJson = "{\"data\":\"ok\"}";
         IdempotencyKey key = IdempotencyKey.builder()
                 .responseStatus(200)
-                .responseBody("{\"data\":\"ok\"}")
+                .responseBody(rawJson)
                 .expiresAt(Instant.now().plusSeconds(100))
                 .build();
 
-        JsonNode mockNode = mock(JsonNode.class);
         when(repository.findByIdempotencyKeyAndUserIdAndRequestPath(any(), any(), any()))
                 .thenReturn(Optional.of(key));
-        when(objectMapper.readTree("{\"data\":\"ok\"}")).thenReturn(mockNode);
+
+        JsonNode realNode = JsonMapper.builder().build().readTree(rawJson);
+
+        when(jsonMapper.readTree(rawJson)).thenReturn(realNode);
 
         var result = idempotencyService.findExistingResponse("key", UUID.randomUUID(), "/path");
 
         assertThat(result).isPresent();
-        assertThat(result.get().body()).isEqualTo(mockNode);
+        assertThat(result.get().status()).isEqualTo(200);
+        assertThat(result.get().body().toString()).contains("ok");
     }
 
     @Test
@@ -120,7 +124,7 @@ class IdempotencyServiceTest {
 
         when(repository.findByIdempotencyKeyAndUserIdAndRequestPath("key", userId, "/path"))
                 .thenReturn(Optional.of(existing));
-        when(objectMapper.writeValueAsString(any())).thenReturn("{\"res\":\"data\"}");
+        when(jsonMapper.writeValueAsString(any())).thenReturn("{\"res\":\"data\"}");
 
         idempotencyService.commitResponse("key", userId, "/path", 200, "payload");
 
@@ -134,7 +138,7 @@ class IdempotencyServiceTest {
     void commitResponse_CreateNewIfMissing() throws Exception {
         UUID userId = UUID.randomUUID();
         when(repository.findByIdempotencyKeyAndUserIdAndRequestPath(any(), any(), any())).thenReturn(Optional.empty());
-        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+        when(jsonMapper.writeValueAsString(any())).thenReturn("{}");
 
         idempotencyService.commitResponse("key", userId, "/path", 500, "error");
 
@@ -146,7 +150,7 @@ class IdempotencyServiceTest {
     @Test
     @DisplayName("should not crash if JSON serialization fails during commit")
     void commitResponse_SerializationFailure() throws Exception {
-        when(objectMapper.writeValueAsString(any())).thenThrow(RuntimeException.class);
+        when(jsonMapper.writeValueAsString(any())).thenThrow(RuntimeException.class);
 
         idempotencyService.commitResponse("key", UUID.randomUUID(), "/path", 200, new Object());
 

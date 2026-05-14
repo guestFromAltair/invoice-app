@@ -1,7 +1,7 @@
 package com.invoiceapp.backend.shared.idempotency;
 
-import com.fasterxml.jackson.core.JsonParseException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.exc.StreamReadException;
+import tools.jackson.databind.json.JsonMapper;
 import com.invoiceapp.backend.auth.domain.User;
 import com.invoiceapp.backend.auth.domain.UserRepository;
 import jakarta.servlet.FilterChain;
@@ -34,7 +34,7 @@ class IdempotencyFilterTest {
     private UserRepository userRepository;
 
     @Spy
-    private ObjectMapper objectMapper = new ObjectMapper();
+    private JsonMapper jsonMapper = new JsonMapper();
 
     @Mock
     private FilterChain filterChain;
@@ -240,7 +240,7 @@ class IdempotencyFilterTest {
             return null;
         }).when(filterChain).doFilter(eq(request), any());
 
-        Assertions.assertThrows(JsonParseException.class, () -> {
+        Assertions.assertThrows(StreamReadException.class, () -> {
             idempotencyFilter.doFilterInternal(request, response, filterChain);
         });
 
