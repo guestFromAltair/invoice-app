@@ -48,8 +48,6 @@ public class InvoiceMetrics {
                 .tag("reason", "commit_failure")
                 .register(registry);
 
-        log.info("Invoice metrics registered successfully");
-
         Gauge.builder("invoices.outstanding.balance", outstandingBalance, AtomicReference::get)
                 .description("Total outstanding invoice balance")
                 .tag("currency", "EUR")
