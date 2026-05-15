@@ -145,9 +145,8 @@ export default function InvoiceDetailPage() {
                         <PaymentDialog
                             invoiceId={id}
                             remainingBalance={invoice.remainingBalance}
-                            onSubmit={async (data: PaymentRequest) => {
-                                await recordPayment({invoiceId: id, body: data}).unwrap();
-                                toast.success('Payment recorded');
+                            onSubmit={async (idempotencyKey: string, data: PaymentRequest) => {
+                                await recordPayment({invoiceId: id, idempotencyKey, body: data}).unwrap();
                             }}
                         />
                     </div>

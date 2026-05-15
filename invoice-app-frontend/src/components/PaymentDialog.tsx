@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useCallback, useState} from 'react';
 import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
 import {z} from 'zod';
@@ -24,12 +24,13 @@ type PaymentFormData = z.infer<typeof paymentSchema>;
 interface PaymentDialogProps {
     invoiceId: string;
     remainingBalance: number;
-    onSubmit: (data: PaymentRequest) => Promise<void>;
+    onSubmit: (idempotencyKey: string, data: PaymentRequest) => Promise<void>;
 }
 
 export function PaymentDialog({remainingBalance, onSubmit}: PaymentDialogProps) {
-    const [open, setOpen] = useState(false);
-    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [open, setOpen] = useState<boolean>(false);
+    const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+    const [idempotencyKey, setIdempotencyKey] = useState<string>(() => crypto.randomUUID());
 
     const {register, handleSubmit, reset, formState: {errors}} =
         useForm<PaymentFormData>({
@@ -37,19 +38,26 @@ export function PaymentDialog({remainingBalance, onSubmit}: PaymentDialogProps) 
             defaultValues: {amount: remainingBalance}
         });
 
-    const handleFormSubmit = async (data: PaymentFormData) => {
+    const handleFormSubmit = useCallback(async (data: PaymentFormData) => {
         setIsSubmitting(true);
         try {
-            await onSubmit({amount: data.amount, method: data.method, notes: data.notes});
+            await onSubmit(idempotencyKey, { ...data });
+
             toast.success('Payment recorded');
             setOpen(false);
             reset();
-        } catch {
+            setIdempotencyKey(crypto.randomUUID());
+        } catch (error: unknown) {
+            const serverError = error as { status?: number };
+            // If 4xx (Client Error) => new key to retry, if 5xx or Network Error => the SAME key
+            if (serverError.status && serverError.status >= 400 && serverError.status < 500) {
+                setIdempotencyKey(crypto.randomUUID());
+            }
             toast.error('Failed to record payment');
         } finally {
             setIsSubmitting(false);
         }
-    };
+    }, [idempotencyKey, onSubmit, reset]);
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
