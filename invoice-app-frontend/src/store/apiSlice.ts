@@ -194,11 +194,14 @@ export const apiSlice = createApi({
             ]
         }),
 
-        recordPayment: builder.mutation<Payment, { invoiceId: string; body: PaymentRequest }>({
-            query: ({invoiceId, body}) => ({
+        recordPayment: builder.mutation<Payment, { invoiceId: string; idempotencyKey: string; body: PaymentRequest }>({
+            query: ({invoiceId, idempotencyKey, body}) => ({
                 url: `/invoices/${invoiceId}/payments`,
                 method: 'POST',
-                body
+                body,
+                headers: {
+                    'Idempotency-Key': idempotencyKey
+                }
             }),
             invalidatesTags: (_result, _error, {invoiceId}) => [
                 {type: 'Payment', id: invoiceId},

@@ -1,4 +1,3 @@
-// Auth
 export interface AuthResponse {
     token: string;
     email: string;
@@ -26,7 +25,6 @@ export interface Page<T> {
     last: boolean;
 }
 
-// Client
 export interface Client {
     id: string;
     name: string;
@@ -45,7 +43,6 @@ export interface ClientRequest {
     vatNumber?: string;
 }
 
-// Invoice
 export type InvoiceStatus =
     | 'DRAFT'
     | 'SENT'
@@ -99,7 +96,6 @@ export interface InvoiceRequest {
     lineItems: LineItemRequest[];
 }
 
-// Payment
 export interface Payment {
     id: string;
     amount: number;
