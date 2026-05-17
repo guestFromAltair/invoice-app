@@ -121,4 +121,28 @@ class GlobalExceptionHandlerTest {
         java.io.IOException otherEx = new java.io.IOException("Connection refused");
         assertThatNoException().isThrownBy(() -> handler.handleIOException(otherEx));
     }
+
+    @Test
+    @DisplayName("should return 409 Conflict with OPTIMISTIC_LOCK_FAILURE property on concurrent modification")
+    void should_handle_optimistic_lock_exception() {
+        // Given an optimistic locking failure exception
+        org.springframework.orm.ObjectOptimisticLockingFailureException ex =
+                new org.springframework.orm.ObjectOptimisticLockingFailureException(
+                        com.invoiceapp.backend.client.domain.Client.class,
+                        java.util.UUID.randomUUID()
+                );
+
+        // When passing it to the handler method
+        ProblemDetail detail = handler.handleOptimisticLock(ex);
+
+        // Then verify the standard RFC 7807 structure matches expectations
+        assertThat(detail.getStatus()).isEqualTo(409); // HttpStatus.CONFLICT
+        assertThat(detail.getTitle()).isEqualTo("Concurrent modification");
+        assertThat(detail.getDetail()).contains("modified by another request");
+
+        // Critically verify that the custom extension map property matches your React query expectations
+        assertThat(detail.getProperties())
+                .isNotNull()
+                .containsEntry("type", "OPTIMISTIC_LOCK_FAILURE");
+    }
 }

@@ -151,37 +151,48 @@ export const apiSlice = createApi({
             invalidatesTags: [{type: 'Invoice', id: 'LIST'}]
         }),
 
-        updateLineItems: builder.mutation<Invoice, { id: string; lineItems: LineItemRequest[] }>({
-            query: ({id, lineItems}) => ({
+        updateLineItems: builder.mutation<Invoice, { id: string; version: number; lineItems: LineItemRequest[] }>({
+            query: ({id, version, lineItems}) => ({
                 url: `/invoices/${id}/line-items`,
                 method: 'PUT',
-                body: lineItems
+                body: { version, lineItems }
             }),
             invalidatesTags: (_result, _error, {id}) => [{
                 type: 'Invoice', id
-            }
-            ]
+            }]
         }),
 
-        sendInvoice: builder.mutation<Invoice, string>({
-            query: (id) => ({url: `/invoices/${id}/send`, method: 'POST'}),
-            invalidatesTags: (_result, _error, id) => [
+        sendInvoice: builder.mutation<Invoice, { id: string; version: number }>({
+            query: ({id, version}) => ({
+                url: `/invoices/${id}/send`,
+                method: 'POST',
+                params: { version }
+            }),
+            invalidatesTags: (_result, _error, {id}) => [
                 {type: 'Invoice', id},
                 {type: 'Invoice', id: 'LIST'}
             ]
         }),
 
-        cancelInvoice: builder.mutation<Invoice, string>({
-            query: (id) => ({url: `/invoices/${id}/cancel`, method: 'POST'}),
-            invalidatesTags: (_result, _error, id) => [
+        cancelInvoice: builder.mutation<Invoice, { id: string; version: number }>({
+            query: ({id, version}) => ({
+                url: `/invoices/${id}/cancel`,
+                method: 'POST',
+                params: { version }
+            }),
+            invalidatesTags: (_result, _error, {id}) => [
                 {type: 'Invoice', id},
                 {type: 'Invoice', id: 'LIST'}
             ]
         }),
 
-        markInvoicePaid: builder.mutation<Invoice, string>({
-            query: (id) => ({url: `/invoices/${id}/mark-paid`, method: 'POST'}),
-            invalidatesTags: (_result, _error, id) => [
+        markInvoicePaid: builder.mutation<Invoice, { id: string; version: number }>({
+            query: ({id, version}) => ({
+                url: `/invoices/${id}/mark-paid`,
+                method: 'POST',
+                params: { version }
+            }),
+            invalidatesTags: (_result, _error, {id}) => [
                 {type: 'Invoice', id},
                 {type: 'Invoice', id: 'LIST'}
             ]

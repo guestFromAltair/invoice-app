@@ -5,7 +5,6 @@ import com.invoiceapp.backend.auth.domain.UserRepository;
 import com.invoiceapp.backend.client.domain.Client;
 import com.invoiceapp.backend.client.domain.ClientRepository;
 import com.invoiceapp.backend.invoice.domain.*;
-import com.invoiceapp.backend.notification.controller.NotificationController;
 import com.invoiceapp.backend.notification.service.NotificationService;
 import com.invoiceapp.backend.shared.exception.InvoiceAppException;
 import com.invoiceapp.backend.shared.metrics.InvoiceMetrics;
@@ -20,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -49,8 +49,6 @@ class InvoiceServiceTest {
     private PaymentRepository paymentRepository;
     @Mock
     private InvoiceMetrics invoiceMetrics;
-    @Mock
-    private NotificationController notificationController;
     @Mock
     private NotificationService notificationService;
 
@@ -94,23 +92,33 @@ class InvoiceServiceTest {
     class StateTransitions {
 
         @Test
-        @DisplayName("should transition from DRAFT to SENT successfully")
+        @DisplayName("should transition from DRAFT to SENT successfully when version matches")
         void should_transition_draft_to_sent() {
-            Invoice invoice = buildInvoice(InvoiceStatus.DRAFT);
+            Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 2L);
             when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
 
-            InvoiceService.InvoiceResponse response = invoiceService.send(invoice.getId());
+            InvoiceService.InvoiceResponse response = invoiceService.send(invoice.getId(), 2L);
 
             assertThat(response.status()).isEqualTo(InvoiceStatus.SENT);
         }
 
         @Test
-        @DisplayName("should throw when transitioning PAID invoice to any status")
-        void should_throw_when_transitioning_paid_invoice() {
-            Invoice invoice = buildInvoice(InvoiceStatus.PAID);
+        @DisplayName("should throw OptimisticLockingFailureException on out-of-sync transition push")
+        void should_throw_optimistic_lock_on_transition() {
+            Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 2L);
             when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
 
-            assertThatThrownBy(() -> invoiceService.send(invoice.getId()))
+            assertThatThrownBy(() -> invoiceService.send(invoice.getId(), 1L)) // Passing stale version 1 instead of 2
+                    .isInstanceOf(org.springframework.orm.ObjectOptimisticLockingFailureException.class);
+        }
+
+        @Test
+        @DisplayName("should throw when transitioning PAID invoice to any status")
+        void should_throw_when_transitioning_paid_invoice() {
+            Invoice invoice = buildInvoice(InvoiceStatus.PAID, 0L);
+            when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
+
+            assertThatThrownBy(() -> invoiceService.send(invoice.getId(), 0L))
                     .isInstanceOf(InvoiceAppException.class)
                     .hasMessageContaining("Cannot transition invoice from PAID");
         }
@@ -118,10 +126,10 @@ class InvoiceServiceTest {
         @Test
         @DisplayName("should throw when transitioning CANCELLED invoice")
         void should_throw_when_transitioning_cancelled_invoice() {
-            Invoice invoice = buildInvoice(InvoiceStatus.CANCELLED);
+            Invoice invoice = buildInvoice(InvoiceStatus.CANCELLED, 0L);
             when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
 
-            assertThatThrownBy(() -> invoiceService.send(invoice.getId()))
+            assertThatThrownBy(() -> invoiceService.send(invoice.getId(), 0L))
                     .isInstanceOf(InvoiceAppException.class)
                     .hasMessageContaining("Cannot transition invoice from CANCELLED");
         }
@@ -132,7 +140,7 @@ class InvoiceServiceTest {
             UUID randomId = UUID.randomUUID();
             when(invoiceRepository.findByIdAndCreatedById(randomId, userId)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> invoiceService.send(randomId))
+            assertThatThrownBy(() -> invoiceService.send(randomId, 0L))
                     .isInstanceOf(InvoiceAppException.class)
                     .hasMessageContaining("Invoice not found");
         }
@@ -140,15 +148,13 @@ class InvoiceServiceTest {
         @Test
         @DisplayName("should allow OVERDUE invoice to be marked PAID")
         void should_allow_overdue_invoice_to_be_marked_paid() {
-            Invoice invoice = buildInvoice(InvoiceStatus.OVERDUE);
+            Invoice invoice = buildInvoice(InvoiceStatus.OVERDUE, 0L);
 
             when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
-
             when(paymentRepository.sumAmountByInvoiceId(invoice.getId())).thenReturn(new BigDecimal("3312.0000"));
-
             when(invoiceRepository.computeOutstandingBalance()).thenReturn(BigDecimal.ZERO);
 
-            InvoiceService.InvoiceResponse response = invoiceService.markPaid(invoice.getId());
+            InvoiceService.InvoiceResponse response = invoiceService.markPaid(invoice.getId(), 0L);
 
             assertThat(response.status()).isEqualTo(InvoiceStatus.PAID);
         }
@@ -156,14 +162,13 @@ class InvoiceServiceTest {
         @Test
         @DisplayName("should record compensating payment when manually marking paid with balance remaining")
         void should_record_compensating_payment_when_marking_paid_with_remaining_balance() {
-            Invoice invoice = buildInvoice(InvoiceStatus.SENT);
+            Invoice invoice = buildInvoice(InvoiceStatus.SENT, 0L);
 
             when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
             when(paymentRepository.sumAmountByInvoiceId(invoice.getId())).thenReturn(BigDecimal.ZERO);
-
             when(invoiceRepository.computeOutstandingBalance()).thenReturn(BigDecimal.ZERO);
 
-            InvoiceService.InvoiceResponse response = invoiceService.markPaid(invoice.getId());
+            InvoiceService.InvoiceResponse response = invoiceService.markPaid(invoice.getId(), 0L);
 
             assertThat(response.status()).isEqualTo(InvoiceStatus.PAID);
 
@@ -176,13 +181,13 @@ class InvoiceServiceTest {
         @Test
         @DisplayName("should not record compensating payment when balance is already zero")
         void should_not_record_compensating_payment_when_already_fully_paid() {
-            Invoice invoice = buildInvoice(InvoiceStatus.SENT);
+            Invoice invoice = buildInvoice(InvoiceStatus.SENT, 0L);
 
             when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
             when(paymentRepository.sumAmountByInvoiceId(invoice.getId())).thenReturn(new BigDecimal("3312.0000"));
             when(invoiceRepository.computeOutstandingBalance()).thenReturn(BigDecimal.ZERO);
 
-            InvoiceService.InvoiceResponse response = invoiceService.markPaid(invoice.getId());
+            InvoiceService.InvoiceResponse response = invoiceService.markPaid(invoice.getId(), 0L);
 
             assertThat(response.status()).isEqualTo(InvoiceStatus.PAID);
 
@@ -225,7 +230,6 @@ class InvoiceServiceTest {
                     )
             );
 
-
             InvoiceService.InvoiceResponse response = invoiceService.create(request);
 
             assertThat(response.subtotal()).isEqualByComparingTo(new BigDecimal("2760.0000"));
@@ -236,8 +240,7 @@ class InvoiceServiceTest {
         @Test
         @DisplayName("should reject invoice when due date is before issue date")
         void should_reject_invoice_with_invalid_dates() {
-            when(clientRepository.findByIdAndOwnerId(clientId, userId))
-                    .thenReturn(Optional.of(testClient));
+            when(clientRepository.findByIdAndOwnerId(clientId, userId)).thenReturn(Optional.of(testClient));
 
             InvoiceService.InvoiceRequest request = new InvoiceService.InvoiceRequest(
                     clientId,
@@ -245,9 +248,7 @@ class InvoiceServiceTest {
                     LocalDate.of(2024, 1, 15),
                     BigDecimal.ZERO,
                     null,
-                    List.of(new InvoiceService.LineItemRequest(
-                            "Test", BigDecimal.ONE,
-                            BigDecimal.TEN, BigDecimal.ZERO, 1))
+                    List.of(new InvoiceService.LineItemRequest("Test", BigDecimal.ONE, BigDecimal.TEN, BigDecimal.ZERO, 1))
             );
 
             assertThatThrownBy(() -> invoiceService.create(request))
@@ -263,7 +264,7 @@ class InvoiceServiceTest {
         @Test
         @DisplayName("should find all invoices with filters")
         void should_find_all_invoices() {
-            Invoice invoice = buildInvoice(InvoiceStatus.DRAFT);
+            Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 0L);
             Page<Invoice> page = new PageImpl<>(List.of(invoice));
 
             when(invoiceRepository.findAllByFilters(eq(userId), any(), any(), any())).thenReturn(page);
@@ -277,7 +278,7 @@ class InvoiceServiceTest {
         @Test
         @DisplayName("should find invoice by id")
         void should_find_by_id() {
-            Invoice invoice = buildInvoice(InvoiceStatus.DRAFT);
+            Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 0L);
             when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
 
             var result = invoiceService.findById(invoice.getId());
@@ -289,11 +290,11 @@ class InvoiceServiceTest {
     @Test
     @DisplayName("should cancel invoice successfully")
     void should_cancel_invoice() {
-        Invoice invoice = buildInvoice(InvoiceStatus.DRAFT);
+        Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 0L);
         when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
         when(invoiceRepository.computeOutstandingBalance()).thenReturn(BigDecimal.ZERO);
 
-        var response = invoiceService.cancel(invoice.getId());
+        var response = invoiceService.cancel(invoice.getId(), 0L);
 
         assertThat(response.status()).isEqualTo(InvoiceStatus.CANCELLED);
         verify(invoiceMetrics).recordStatusTransition(InvoiceStatus.CANCELLED);
@@ -304,9 +305,9 @@ class InvoiceServiceTest {
     class Modifications {
 
         @Test
-        @DisplayName("should update line items for DRAFT invoice")
+        @DisplayName("should update line items for DRAFT invoice when version matches")
         void should_update_line_items() {
-            Invoice invoice = buildInvoice(InvoiceStatus.DRAFT);
+            Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 4L);
             invoice.getLineItems().add(new LineItem());
 
             when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
@@ -315,7 +316,7 @@ class InvoiceServiceTest {
                     new InvoiceService.LineItemRequest("New Item", BigDecimal.ONE, BigDecimal.TEN, BigDecimal.ZERO, 1)
             );
 
-            var response = invoiceService.updateLineItems(invoice.getId(), newItems);
+            var response = invoiceService.updateLineItems(invoice.getId(), 4L, newItems);
 
             assertThat(response.lineItems()).hasSize(1);
             assertThat(response.lineItems().getFirst().description()).isEqualTo("New Item");
@@ -323,18 +324,28 @@ class InvoiceServiceTest {
         }
 
         @Test
-        @DisplayName("should throw when updating non-DRAFT invoice")
-        void should_throw_when_updating_sent_invoice() {
-            Invoice invoice = buildInvoice(InvoiceStatus.SENT);
+        @DisplayName("should throw OptimisticLockingFailureException on stale line item edit requests")
+        void should_throw_optimistic_lock_on_line_item_edit() {
+            Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 4L);
             when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
 
-            assertThatThrownBy(() -> invoiceService.updateLineItems(invoice.getId(), List.of()))
+            assertThatThrownBy(() -> invoiceService.updateLineItems(invoice.getId(), 3L, List.of()))
+                    .isInstanceOf(ObjectOptimisticLockingFailureException.class);
+        }
+
+        @Test
+        @DisplayName("should throw when updating non-DRAFT invoice")
+        void should_throw_when_updating_sent_invoice() {
+            Invoice invoice = buildInvoice(InvoiceStatus.SENT, 1L);
+            when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
+
+            assertThatThrownBy(() -> invoiceService.updateLineItems(invoice.getId(), 1L, List.of()))
                     .isInstanceOf(InvoiceAppException.class)
                     .hasMessageContaining("Only DRAFT invoices can be edited");
         }
     }
 
-    private Invoice buildInvoice(InvoiceStatus status) {
+    private Invoice buildInvoice(InvoiceStatus status, Long version) {
         return Invoice.builder()
                 .id(UUID.randomUUID())
                 .invoiceNumber("INV-2024-00001")
@@ -349,6 +360,7 @@ class InvoiceServiceTest {
                 .total(new BigDecimal("3312.0000"))
                 .lineItems(new ArrayList<>())
                 .payments(new ArrayList<>())
+                .version(version)
                 .build();
     }
 }

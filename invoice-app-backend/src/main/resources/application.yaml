@@ -25,6 +25,9 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
 
+  profiles:
+    active: dev
+
 server:
   port: 8080
 
@@ -52,3 +55,19 @@ application:
     jwt:
       secret-key: ${JWT_SECRET:provide_a_real_secret_key}
       expiration: 86400000
+
+---
+# ===================================================================
+# DEVELOPMENT PROFILE ONLY
+# ===================================================================
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+  jpa:
+    show-sql: true
+
+logging:
+  level:
+    org.hibernate.orm.jdbc.bind: trace

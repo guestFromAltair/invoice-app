@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -80,7 +81,8 @@ public class InvoiceService {
             BigDecimal remainingBalance,
             String notes,
             List<LineItemResponse> lineItems,
-            Instant createdAt
+            Instant createdAt,
+            Long version
     ) {}
 
     private User getCurrentUser() {
@@ -105,9 +107,7 @@ public class InvoiceService {
 
         Client client = clientRepository
                 .findByIdAndOwnerId(request.clientId(), user.getId())
-                .orElseThrow(() -> new InvoiceAppException(
-                        "Client not found", HttpStatus.NOT_FOUND
-                ));
+                .orElseThrow(() -> new InvoiceAppException("Client not found", HttpStatus.NOT_FOUND));
 
         if (request.dueDate().isBefore(request.issueDate())) {
             throw new InvoiceAppException(
@@ -162,26 +162,23 @@ public class InvoiceService {
         User user = getCurrentUser();
         Invoice invoice = invoiceRepository
                 .findByIdAndCreatedById(id, user.getId())
-                .orElseThrow(() -> new InvoiceAppException(
-                        "Invoice not found", HttpStatus.NOT_FOUND
-                ));
+                .orElseThrow(() -> new InvoiceAppException("Invoice not found", HttpStatus.NOT_FOUND));
         return toResponse(invoice);
     }
 
     @Transactional
-    public InvoiceResponse updateLineItems(UUID id, List<LineItemRequest> lineItems) {
+    public InvoiceResponse updateLineItems(UUID id, Long version, List<LineItemRequest> lineItems) {
         User user = getCurrentUser();
         Invoice invoice = invoiceRepository
                 .findByIdAndCreatedById(id, user.getId())
-                .orElseThrow(() -> new InvoiceAppException(
-                        "Invoice not found", HttpStatus.NOT_FOUND
-                ));
+                .orElseThrow(() -> new InvoiceAppException("Invoice not found", HttpStatus.NOT_FOUND));
+
+        if (version != null && !invoice.getVersion().equals(version)) {
+            throw new ObjectOptimisticLockingFailureException(Invoice.class, id);
+        }
 
         if (invoice.getStatus() != InvoiceStatus.DRAFT) {
-            throw new InvoiceAppException(
-                    "Only DRAFT invoices can be edited",
-                    HttpStatus.UNPROCESSABLE_CONTENT
-            );
+            throw new InvoiceAppException("Only DRAFT invoices can be edited", HttpStatus.UNPROCESSABLE_CONTENT);
         }
 
         // Hibernate issues delete current LineItems first upon commit(before we create a new list of LineItems)
@@ -207,34 +204,33 @@ public class InvoiceService {
     }
 
     @Transactional
-    public InvoiceResponse send(UUID id) {
-        return transition(id, InvoiceStatus.SENT);
+    public InvoiceResponse send(UUID id, Long version) {
+        return transition(id, InvoiceStatus.SENT, version);
     }
 
     @Transactional
-    public InvoiceResponse cancel(UUID id) {
-        return transition(id, InvoiceStatus.CANCELLED);
+    public InvoiceResponse cancel(UUID id, Long version) {
+        return transition(id, InvoiceStatus.CANCELLED, version);
     }
 
     @Transactional
-    public InvoiceResponse markPaid(UUID id) {
-        return transition(id, InvoiceStatus.PAID);
+    public InvoiceResponse markPaid(UUID id, Long version) {
+        return transition(id, InvoiceStatus.PAID, version);
     }
 
-    private InvoiceResponse transition(UUID id, InvoiceStatus target) {
+    private InvoiceResponse transition(UUID id, InvoiceStatus target, Long version) {
         User user = getCurrentUser();
         Invoice invoice = invoiceRepository
                 .findByIdAndCreatedById(id, user.getId())
-                .orElseThrow(() -> new InvoiceAppException(
-                        "Invoice not found", HttpStatus.NOT_FOUND
-                ));
+                .orElseThrow(() -> new InvoiceAppException("Invoice not found", HttpStatus.NOT_FOUND));
+
+        if (version != null && !invoice.getVersion().equals(version)) {
+            throw new ObjectOptimisticLockingFailureException(Invoice.class, id);
+        }
 
         if (!invoice.getStatus().canTransitionTo(target)) {
             throw new InvoiceAppException(
-                    String.format(
-                            "Cannot transition invoice from %s to %s",
-                            invoice.getStatus(), target
-                    ),
+                    String.format("Cannot transition invoice from %s to %s", invoice.getStatus(), target),
                     HttpStatus.UNPROCESSABLE_CONTENT
             );
         }
@@ -307,7 +303,8 @@ public class InvoiceService {
                 remaining,
                 invoice.getNotes(),
                 lineItemResponses,
-                invoice.getCreatedAt()
+                invoice.getCreatedAt(),
+                invoice.getVersion()
         );
     }
 
