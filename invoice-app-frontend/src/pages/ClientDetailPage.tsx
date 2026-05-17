@@ -6,7 +6,7 @@ import {z} from 'zod';
 import {
     useGetClientQuery,
     useUpdateClientMutation,
-    useGetInvoicesQuery
+    useGetInvoicesQuery, apiSlice
 } from '../store/apiSlice';
 import {Button} from '../components/ui/button';
 import {Input} from '../components/ui/input';
@@ -25,6 +25,7 @@ import {ArrowLeft, Pencil, Check, X, Plus, Calendar, Wallet} from 'lucide-react'
 import {toast} from 'sonner';
 import {skipToken} from '@reduxjs/toolkit/query';
 import {statusVariant} from "@/utils/invoiceStatus.ts";
+import {useDispatch} from "react-redux";
 
 const clientSchema = z.object({
     name: z.string().min(1, 'Name is required'),
@@ -41,6 +42,7 @@ const formatCurrency = (amount: number) =>
         .format(amount);
 
 export default function ClientDetailPage() {
+    const dispatch = useDispatch();
     const {id} = useParams<{ id: string }>();
     const navigate = useNavigate();
     const [isEditing, setIsEditing] = useState(false);
@@ -77,6 +79,11 @@ export default function ClientDetailPage() {
     }
 
     const onSubmit = async (data: ClientFormData) => {
+        if (!client) {
+            toast.error('Unable to update: Client data is missing');
+            return;
+        }
+
         try {
             await updateClient({
                 id: id,
@@ -85,13 +92,24 @@ export default function ClientDetailPage() {
                     email: data.email || undefined,
                     phone: data.phone || undefined,
                     address: data.address || undefined,
-                    vatNumber: data.vatNumber || undefined
+                    vatNumber: data.vatNumber || undefined,
+                    version: client.version
                 },
             }).unwrap();
             toast.success('Client updated');
             setIsEditing(false);
-        } catch {
-            toast.error('Failed to update client');
+        } catch (error: unknown) {
+            const errorData = (error as { data?: { type?: string } })?.data;
+            if (errorData?.type === 'OPTIMISTIC_LOCK_FAILURE') {
+                toast.error(
+                    'This client was modified in another session. ' +
+                    'Refreshing to show the latest version.'
+                );
+                dispatch(apiSlice.util.invalidateTags([{type: 'Client', id: id}]));
+                setIsEditing(false);
+            } else {
+                toast.error('Failed to update client');
+            }
         }
     };
 

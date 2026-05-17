@@ -2,10 +2,12 @@ package com.invoiceapp.backend.client.controller;
 
 import com.invoiceapp.backend.auth.domain.UserRepository;
 import com.invoiceapp.backend.auth.service.JwtService;
+import com.invoiceapp.backend.client.domain.Client;
 import com.invoiceapp.backend.client.service.ClientService;
 import com.invoiceapp.backend.shared.exception.InvoiceAppException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.data.domain.PageImpl;
@@ -13,6 +15,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -48,7 +51,14 @@ class ClientControllerTest {
     @DisplayName("GET /api/clients should return paginated list")
     void find_all_returns_200() throws Exception {
         ClientService.ClientResponse mockClient = new ClientService.ClientResponse(
-                UUID.randomUUID(), "Acme Corp", "contact@acme.com", null, null, null, null
+                UUID.randomUUID(),
+                "Acme Corp",
+                "contact@acme.com",
+                null,
+                null,
+                null,
+                null,
+                0L
         );
 
         PageRequest pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "name"));
@@ -71,7 +81,14 @@ class ClientControllerTest {
                 """;
 
         ClientService.ClientResponse mockResponse = new ClientService.ClientResponse(
-                UUID.randomUUID(), "Global Tech", "info@globaltech.com", null, null, null, null
+                UUID.randomUUID(),
+                "Global Tech",
+                "info@globaltech.com",
+                null,
+                null,
+                null,
+                null,
+                0L
         );
 
         when(clientService.create(any(ClientService.ClientRequest.class))).thenReturn(mockResponse);
@@ -105,16 +122,31 @@ class ClientControllerTest {
 
     @Test
     @WithMockUser
-    @DisplayName("PUT /api/clients/{id} should update client")
+    @DisplayName("PUT /api/clients/{id} should update client and bind version")
     void update_returns_200() throws Exception {
         UUID id = UUID.randomUUID();
-        String json = "{\"name\": \"Updated Name\"}";
+        String json = """
+                {
+                    "name": "Updated Name",
+                    "version": 4
+                }
+                """;
 
         ClientService.ClientResponse mockResponse = new ClientService.ClientResponse(
-                id, "Updated Name", null, null, null, null, null
+                id,
+                "Updated Name",
+                null,
+                null,
+                null,
+                null,
+                null,
+                5L
         );
 
-        when(clientService.update(eq(id), any(ClientService.ClientRequest.class))).thenReturn(mockResponse);
+        when(clientService.update(
+                eq(id),
+                Mockito.argThat(req -> req.version() != null && req.version() == 4L)
+        )).thenReturn(mockResponse);
 
         mockMvc.perform(put("/api/clients/{id}", id)
                         .with(csrf())
@@ -122,6 +154,30 @@ class ClientControllerTest {
                         .content(json))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Updated Name"));
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("PUT /api/clients/{id} should return 409 Conflict when service throws optimistic lock exception")
+    void update_returns_409_on_version_mismatch() throws Exception {
+        UUID id = UUID.randomUUID();
+        String json = """
+                {
+                    "name": "Stale Update",
+                    "version": 2
+                }
+                """;
+
+        when(clientService.update(eq(id), any(ClientService.ClientRequest.class)))
+                .thenThrow(new ObjectOptimisticLockingFailureException(Client.class, id));
+
+        mockMvc.perform(put("/api/clients/{id}", id)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Concurrent modification"))
+                .andExpect(jsonPath("$.type").value("OPTIMISTIC_LOCK_FAILURE"));
     }
 
     @Test

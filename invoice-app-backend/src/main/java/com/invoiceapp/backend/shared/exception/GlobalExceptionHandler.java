@@ -1,11 +1,14 @@
 package com.invoiceapp.backend.shared.exception;
 
+import jakarta.persistence.OptimisticLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -69,6 +72,29 @@ public class GlobalExceptionHandler {
         if (ex.getMessage() != null && ex.getMessage().contains("Broken pipe")) {
             return;
         }
+    }
+
+    @ExceptionHandler({OptimisticLockException.class, ObjectOptimisticLockingFailureException.class})
+    public ProblemDetail handleOptimisticLock(Exception ex) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT,
+                "This record was modified by another request. " +
+                        "Please refresh and try again."
+        );
+        detail.setTitle("Concurrent modification");
+        detail.setProperty("type", "OPTIMISTIC_LOCK_FAILURE");
+        return detail;
+    }
+
+    // Missing query parameters
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ProblemDetail handleMissingParams(MissingServletRequestParameterException ex) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST,
+                String.format("Required query parameter '%s' is missing.", ex.getParameterName())
+        );
+        detail.setTitle("Missing request parameter");
+        return detail;
     }
 
     // Catch-all exception

@@ -43,7 +43,8 @@ public class ClientController {
                         request.email(),
                         request.phone(),
                         request.address(),
-                        request.vatNumber()
+                        request.vatNumber(),
+                        null
                 )
         );
     }
@@ -60,7 +61,8 @@ public class ClientController {
                         request.email(),
                         request.phone(),
                         request.address(),
-                        request.vatNumber()
+                        request.vatNumber(),
+                        request.version()
                 )
         );
     }
@@ -78,6 +80,7 @@ public class ClientController {
             String email,
             String phone,
             String address,
-            String vatNumber
+            String vatNumber,
+            Long version
     ) {}
 }

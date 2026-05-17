@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,8 +31,10 @@ public class ClientService {
             String email,
             String phone,
             String address,
-            String vatNumber
-    ) {}
+            String vatNumber,
+            Long version
+    ) {
+    }
 
     public record ClientResponse(
             UUID id,
@@ -40,8 +43,10 @@ public class ClientService {
             String phone,
             String address,
             String vatNumber,
-            Instant createdAt
-    ) {}
+            Instant createdAt,
+            Long version
+    ) {
+    }
 
     private User getCurrentUser() {
         String email = Objects.requireNonNull(SecurityContextHolder.getContext()
@@ -103,6 +108,10 @@ public class ClientService {
                         "Client not found", HttpStatus.NOT_FOUND
                 ));
 
+        if (request.version() != null && !client.getVersion().equals(request.version())) {
+            throw new ObjectOptimisticLockingFailureException(Client.class, id);
+        }
+
         client.setName(request.name());
         client.setEmail(request.email());
         client.setPhone(request.phone());
@@ -130,7 +139,8 @@ public class ClientService {
                 client.getPhone(),
                 client.getAddress(),
                 client.getVatNumber(),
-                client.getCreatedAt()
+                client.getCreatedAt(),
+                client.getVersion()
         );
     }
 }

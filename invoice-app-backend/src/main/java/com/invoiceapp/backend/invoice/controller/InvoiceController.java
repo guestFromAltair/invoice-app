@@ -56,8 +56,7 @@ public class InvoiceController {
                 request.dueDate(),
                 request.taxRate(),
                 request.notes(),
-                request.lineItems() == null ? List.of() :
-                        request.lineItems().stream()
+                request.lineItems().stream()
                         .map(li -> new InvoiceService.LineItemRequest(
                                 li.description(),
                                 li.quantity(),
@@ -72,11 +71,12 @@ public class InvoiceController {
     @PutMapping("/{id}/line-items")
     public InvoiceService.InvoiceResponse updateLineItems(
             @PathVariable UUID id,
-            @Valid @RequestBody List<LineItemRequest> lineItems
+            @Valid @RequestBody UpdateLineItemsRequest request
     ) {
         return invoiceService.updateLineItems(
                 id,
-                lineItems.stream()
+                request.version(),
+                request.lineItems().stream()
                         .map(li -> new InvoiceService.LineItemRequest(
                                 li.description(),
                                 li.quantity(),
@@ -89,18 +89,18 @@ public class InvoiceController {
     }
 
     @PostMapping("/{id}/send")
-    public InvoiceService.InvoiceResponse send(@PathVariable UUID id) {
-        return invoiceService.send(id);
+    public InvoiceService.InvoiceResponse send(@PathVariable UUID id, @RequestParam Long version) {
+        return invoiceService.send(id, version);
     }
 
     @PostMapping("/{id}/cancel")
-    public InvoiceService.InvoiceResponse cancel(@PathVariable UUID id) {
-        return invoiceService.cancel(id);
+    public InvoiceService.InvoiceResponse cancel(@PathVariable UUID id, @RequestParam Long version) {
+        return invoiceService.cancel(id, version);
     }
 
     @PostMapping("/{id}/mark-paid")
-    public InvoiceService.InvoiceResponse markPaid(@PathVariable UUID id) {
-        return invoiceService.markPaid(id);
+    public InvoiceService.InvoiceResponse markPaid(@PathVariable UUID id, @RequestParam Long version) {
+        return invoiceService.markPaid(id, version);
     }
 
     public record LineItemRequest(
@@ -138,6 +138,13 @@ public class InvoiceController {
             List<LineItemRequest> lineItems
     ) {}
 
+    public record UpdateLineItemsRequest(
+            @NotNull(message = "Version is required")
+            Long version,
+            @NotEmpty(message = "At least one line item is required")
+            List<LineItemRequest> lineItems
+    ) {}
+
     @GetMapping(value = "/{id}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<byte[]> downloadPdf(@PathVariable UUID id) {
         String email = Objects.requireNonNull(SecurityContextHolder.getContext().getAuthentication()).getName();
@@ -145,8 +152,7 @@ public class InvoiceController {
 
         byte[] pdfBytes = pdfGenerationService.generateInvoicePdf(id, userId);
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=\"" + "invoice-" + id + ".pdf\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + "invoice-" + id + ".pdf\"")
                 .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_PDF_VALUE)
                 .body(pdfBytes);
     }

@@ -9,6 +9,7 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -27,6 +28,10 @@ public class Invoice {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
+
+    @Version
+    @Column(nullable = false)
+    private Long version;
 
     @Column(nullable = false, unique = true, updatable = false)
     private String invoiceNumber;
@@ -88,7 +93,7 @@ public class Invoice {
             fetch = FetchType.LAZY
     )
     @Builder.Default
-    private List<com.invoiceapp.backend.invoice.domain.Payment> payments = new ArrayList<>();
+    private List<Payment> payments = new ArrayList<>();
 
     @CreatedDate
     @Column(nullable = false, updatable = false)
@@ -105,7 +110,7 @@ public class Invoice {
 
         this.taxAmount = this.subtotal
                 .multiply(this.taxRate)
-                .setScale(4, java.math.RoundingMode.HALF_UP);
+                .setScale(4, RoundingMode.HALF_UP);
 
         this.total = this.subtotal.add(this.taxAmount);
     }

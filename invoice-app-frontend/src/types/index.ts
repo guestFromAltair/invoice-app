@@ -33,6 +33,7 @@ export interface Client {
     address: string | null;
     vatNumber: string | null;
     createdAt: string;
+    version: number;
 }
 
 export interface ClientRequest {
@@ -41,6 +42,7 @@ export interface ClientRequest {
     phone?: string;
     address?: string;
     vatNumber?: string;
+    version?: number;
 }
 
 export type InvoiceStatus =
@@ -77,6 +79,7 @@ export interface Invoice {
     notes: string | null;
     lineItems: LineItem[];
     createdAt: string;
+    version: number;
 }
 
 export interface LineItemRequest {

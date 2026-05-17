@@ -16,6 +16,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -84,7 +85,8 @@ class ClientServiceTest {
                             "client@acme.com",
                             "+33123456789",
                             "12 Rue de Rivoli, Paris",
-                            "FR12345678901"
+                            "FR12345678901",
+                            null
                     )
             );
 
@@ -106,7 +108,7 @@ class ClientServiceTest {
                     new ClientService.ClientRequest(
                             "Acme Corp",
                             "duplicate@acme.com",
-                            null, null, null
+                            null, null, null, 1L
                     )
             ))
                     .isInstanceOf(InvoiceAppException.class)
@@ -164,6 +166,7 @@ class ClientServiceTest {
                     .owner(testUser)
                     .name("Old Name")
                     .email("old@acme.com")
+                    .version(1L)
                     .build();
 
             when(clientRepository.findByIdAndOwnerId(existing.getId(), userId)).thenReturn(Optional.of(existing));
@@ -173,12 +176,13 @@ class ClientServiceTest {
                     new ClientService.ClientRequest(
                             "New Name",
                             "new@acme.com",
-                            null, null, null
+                            null, null, null, 1L
                     )
             );
 
             assertThat(response.name()).isEqualTo("New Name");
             assertThat(response.email()).isEqualTo("new@acme.com");
+            assertThat(response.version()).isEqualTo(1L);
         }
     }
 
@@ -214,5 +218,31 @@ class ClientServiceTest {
 
             verify(clientRepository, never()).delete(any());
         }
+    }
+
+    @Test
+    @DisplayName("should throw ObjectOptimisticLockingFailureException when versions mismatch")
+    void should_throw_optimistic_lock_exception_on_version_mismatch() {
+        Client existingClient = Client.builder()
+                .id(UUID.randomUUID())
+                .owner(testUser)
+                .name("Old Name")
+                .email("old@acme.com")
+                .version(5L)
+                .build();
+
+        when(clientRepository.findByIdAndOwnerId(existingClient.getId(), userId)).thenReturn(Optional.of(existingClient));
+
+        assertThatThrownBy(() -> clientService.update(
+                existingClient.getId(),
+                new ClientService.ClientRequest(
+                        "New Name",
+                        "new@acme.com",
+                        null, null, null,
+                        4L
+                )
+        )).isInstanceOf(ObjectOptimisticLockingFailureException.class);
+
+        assertThat(existingClient.getName()).isEqualTo("Old Name");
     }
 }
