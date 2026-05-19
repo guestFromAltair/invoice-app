@@ -44,7 +44,8 @@ public class InvoiceService {
             BigDecimal unitPrice,
             BigDecimal discountPct,
             Integer position
-    ) {}
+    ) {
+    }
 
     public record InvoiceRequest(
             UUID clientId,
@@ -53,7 +54,8 @@ public class InvoiceService {
             BigDecimal taxRate,
             String notes,
             List<LineItemRequest> lineItems
-    ) {}
+    ) {
+    }
 
     public record LineItemResponse(
             UUID id,
@@ -63,7 +65,8 @@ public class InvoiceService {
             BigDecimal discountPct,
             BigDecimal lineTotal,
             Integer position
-    ) {}
+    ) {
+    }
 
     public record InvoiceResponse(
             UUID id,
@@ -83,7 +86,8 @@ public class InvoiceService {
             List<LineItemResponse> lineItems,
             Instant createdAt,
             Long version
-    ) {}
+    ) {
+    }
 
     private User getCurrentUser() {
         String email = Objects.requireNonNull(SecurityContextHolder.getContext()
@@ -193,6 +197,10 @@ public class InvoiceService {
             throw new InvoiceAppException("Due date cannot be before issue date", HttpStatus.UNPROCESSABLE_CONTENT);
         }
 
+        if (lineItems == null || lineItems.isEmpty()) {
+            throw new InvoiceAppException("An invoice must contain at least one line item", HttpStatus.UNPROCESSABLE_CONTENT);
+        }
+
         invoice.setIssueDate(issueDate);
         invoice.setDueDate(dueDate);
         invoice.setTaxRate(taxRate != null ? taxRate : BigDecimal.ZERO);
@@ -201,23 +209,21 @@ public class InvoiceService {
         // Hibernate issues delete current LineItems first upon commit(before we create a new list of LineItems)
         invoice.getLineItems().clear();
 
-        if (lineItems != null) {
-            List<LineItem> newItems = lineItems.stream()
-                    .map(req -> LineItem.builder()
-                            .invoice(invoice)
-                            .description(req.description())
-                            .quantity(req.quantity())
-                            .unitPrice(req.unitPrice())
-                            .discountPct(req.discountPct() != null
-                                    ? req.discountPct()
-                                    : BigDecimal.ZERO)
-                            .position(req.position() != null ? req.position() : 0)
-                            .build())
-                    .toList();
+        List<LineItem> newItems = lineItems.stream()
+                .map(req -> LineItem.builder()
+                        .invoice(invoice)
+                        .description(req.description())
+                        .quantity(req.quantity())
+                        .unitPrice(req.unitPrice())
+                        .discountPct(req.discountPct() != null
+                                ? req.discountPct()
+                                : BigDecimal.ZERO)
+                        .position(req.position() != null ? req.position() : 0)
+                        .build())
+                .toList();
 
-            // Now that the current items have been deleted we create a new (updated) list of LineItems
-            invoice.getLineItems().addAll(newItems);
-        }
+        // Now that the current items have been deleted we create a new (updated) list of LineItems
+        invoice.getLineItems().addAll(newItems);
 
         invoice.recalculateTotals();
         return toResponse(invoice);

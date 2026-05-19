@@ -338,8 +338,19 @@ class InvoiceServiceTest {
             Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 4L);
             when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
 
-            assertThatThrownBy(() -> invoiceService.update(invoice.getId(), 3L, LocalDate.now(), LocalDate.now().plusDays(10), BigDecimal.ZERO, null, List.of()))
-                    .isInstanceOf(ObjectOptimisticLockingFailureException.class);
+            List<InvoiceService.LineItemRequest> validItems = List.of(
+                    new InvoiceService.LineItemRequest("Test Item", BigDecimal.ONE, BigDecimal.TEN, BigDecimal.ZERO, 1)
+            );
+
+            assertThatThrownBy(() -> invoiceService.update(
+                    invoice.getId(),
+                    3L,
+                    LocalDate.now(),
+                    LocalDate.now().plusDays(10),
+                    BigDecimal.ZERO,
+                    null,
+                    validItems
+            )).isInstanceOf(ObjectOptimisticLockingFailureException.class);
         }
 
         @Test
@@ -348,8 +359,19 @@ class InvoiceServiceTest {
             Invoice invoice = buildInvoice(InvoiceStatus.SENT, 1L);
             when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
 
-            assertThatThrownBy(() -> invoiceService.update(invoice.getId(), 1L, LocalDate.now(), LocalDate.now().plusDays(10), BigDecimal.ZERO, null, List.of()))
-                    .isInstanceOf(InvoiceAppException.class)
+            List<InvoiceService.LineItemRequest> validItems = List.of(
+                    new InvoiceService.LineItemRequest("Test Item", BigDecimal.ONE, BigDecimal.TEN, BigDecimal.ZERO, 1)
+            );
+
+            assertThatThrownBy(() -> invoiceService.update(
+                    invoice.getId(),
+                    1L,
+                    LocalDate.now(),
+                    LocalDate.now().plusDays(10),
+                    BigDecimal.ZERO,
+                    null,
+                    validItems
+            )).isInstanceOf(InvoiceAppException.class)
                     .hasMessageContaining("Only DRAFT invoices can be edited");
         }
 
@@ -374,6 +396,42 @@ class InvoiceServiceTest {
                     .isInstanceOf(InvoiceAppException.class)
                     .hasMessageContaining("Due date cannot be before issue date");
         }
+    }
+
+    @Test
+    @DisplayName("should reject invoice updates when line items list is empty")
+    void should_reject_invoice_update_with_empty_line_items() {
+        Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 1L);
+        when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
+
+        assertThatThrownBy(() -> invoiceService.update(
+                invoice.getId(),
+                1L,
+                LocalDate.now(),
+                LocalDate.now().plusDays(10),
+                BigDecimal.ZERO,
+                null,
+                List.of()
+        )).isInstanceOf(InvoiceAppException.class)
+                .hasMessageContaining("An invoice must contain at least one line item");
+    }
+
+    @Test
+    @DisplayName("should reject invoice updates when line items list is null")
+    void should_reject_invoice_update_with_null_line_items() {
+        Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 1L);
+        when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
+
+        assertThatThrownBy(() -> invoiceService.update(
+                invoice.getId(),
+                1L,
+                LocalDate.now(),
+                LocalDate.now().plusDays(10),
+                BigDecimal.ZERO,
+                null,
+                null
+        )).isInstanceOf(InvoiceAppException.class)
+                .hasMessageContaining("An invoice must contain at least one line item");
     }
 
     private Invoice buildInvoice(InvoiceStatus status, Long version) {
