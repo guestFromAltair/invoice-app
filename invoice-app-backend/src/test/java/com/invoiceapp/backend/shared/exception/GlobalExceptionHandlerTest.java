@@ -1,15 +1,19 @@
 package com.invoiceapp.backend.shared.exception;
 
+import com.invoiceapp.backend.client.domain.Client;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
@@ -125,24 +129,30 @@ class GlobalExceptionHandlerTest {
     @Test
     @DisplayName("should return 409 Conflict with OPTIMISTIC_LOCK_FAILURE property on concurrent modification")
     void should_handle_optimistic_lock_exception() {
-        // Given an optimistic locking failure exception
         org.springframework.orm.ObjectOptimisticLockingFailureException ex =
-                new org.springframework.orm.ObjectOptimisticLockingFailureException(
-                        com.invoiceapp.backend.client.domain.Client.class,
-                        java.util.UUID.randomUUID()
-                );
+                new ObjectOptimisticLockingFailureException(Client.class, UUID.randomUUID());
 
-        // When passing it to the handler method
         ProblemDetail detail = handler.handleOptimisticLock(ex);
 
-        // Then verify the standard RFC 7807 structure matches expectations
-        assertThat(detail.getStatus()).isEqualTo(409); // HttpStatus.CONFLICT
+        assertThat(detail.getStatus()).isEqualTo(409);
         assertThat(detail.getTitle()).isEqualTo("Concurrent modification");
         assertThat(detail.getDetail()).contains("modified by another request");
 
-        // Critically verify that the custom extension map property matches your React query expectations
         assertThat(detail.getProperties())
                 .isNotNull()
                 .containsEntry("type", "OPTIMISTIC_LOCK_FAILURE");
+    }
+
+    @Test
+    @DisplayName("should return 400 Bad Request with precise message for missing query parameter")
+    void should_handle_missing_servlet_request_parameter_exception() {
+        org.springframework.web.bind.MissingServletRequestParameterException ex =
+                new MissingServletRequestParameterException("clientId", "String");
+
+        ProblemDetail detail = handler.handleMissingParams(ex);
+
+        assertThat(detail.getStatus()).isEqualTo(400);
+        assertThat(detail.getTitle()).isEqualTo("Missing request parameter");
+        assertThat(detail.getDetail()).isEqualTo("Required query parameter 'clientId' is missing.");
     }
 }
