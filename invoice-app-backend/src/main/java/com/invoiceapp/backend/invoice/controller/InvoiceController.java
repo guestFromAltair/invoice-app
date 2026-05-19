@@ -68,14 +68,18 @@ public class InvoiceController {
         ));
     }
 
-    @PutMapping("/{id}/line-items")
-    public InvoiceService.InvoiceResponse updateLineItems(
+    @PutMapping("/{id}")
+    public InvoiceService.InvoiceResponse update(
             @PathVariable UUID id,
-            @Valid @RequestBody UpdateLineItemsRequest request
+            @Valid @RequestBody UpdateInvoiceRequest request
     ) {
-        return invoiceService.updateLineItems(
+        return invoiceService.update(
                 id,
                 request.version(),
+                request.issueDate(),
+                request.dueDate(),
+                request.taxRate(),
+                request.notes(),
                 request.lineItems().stream()
                         .map(li -> new InvoiceService.LineItemRequest(
                                 li.description(),
@@ -138,9 +142,22 @@ public class InvoiceController {
             List<LineItemRequest> lineItems
     ) {}
 
-    public record UpdateLineItemsRequest(
+    public record UpdateInvoiceRequest(
             @NotNull(message = "Version is required")
             Long version,
+
+            @NotNull(message = "Issue date is required")
+            LocalDate issueDate,
+
+            @NotNull(message = "Due date is required")
+            LocalDate dueDate,
+
+            @NotNull(message = "Tax rate is required")
+            @DecimalMin("0.0") @DecimalMax("1.0")
+            BigDecimal taxRate,
+
+            String notes,
+
             @NotEmpty(message = "At least one line item is required")
             List<LineItemRequest> lineItems
     ) {}

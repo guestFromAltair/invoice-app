@@ -9,8 +9,8 @@ import type {RootState} from './index';
 import type {
     AuthResponse, LoginRequest, RegisterRequest,
     Client, ClientRequest, Page,
-    Invoice, InvoiceRequest, InvoiceStatus, LineItemRequest,
-    Payment, PaymentRequest
+    Invoice, InvoiceStatus,
+    Payment, PaymentRequest, UpdateInvoiceRequest, CreateInvoiceRequest
 } from '@/types';
 import {logout} from "@/store/authSlice.ts";
 
@@ -142,7 +142,7 @@ export const apiSlice = createApi({
             }]
         }),
 
-        createInvoice: builder.mutation<Invoice, InvoiceRequest>({
+        createInvoice: builder.mutation<Invoice, CreateInvoiceRequest>({
             query: (body) => ({
                 url: '/invoices',
                 method: 'POST',
@@ -151,15 +151,16 @@ export const apiSlice = createApi({
             invalidatesTags: [{type: 'Invoice', id: 'LIST'}]
         }),
 
-        updateLineItems: builder.mutation<Invoice, { id: string; version: number; lineItems: LineItemRequest[] }>({
-            query: ({id, version, lineItems}) => ({
-                url: `/invoices/${id}/line-items`,
+        updateInvoice: builder.mutation<Invoice, { id: string; body: UpdateInvoiceRequest }>({
+            query: ({ id, body }) => ({
+                url: `/invoices/${id}`,
                 method: 'PUT',
-                body: { version, lineItems }
+                body: body
             }),
-            invalidatesTags: (_result, _error, {id}) => [{
-                type: 'Invoice', id
-            }]
+            invalidatesTags: (_result, _error, { id }) => [
+                { type: 'Invoice', id },
+                { type: 'Invoice', id: 'LIST' }
+            ]
         }),
 
         sendInvoice: builder.mutation<Invoice, { id: string; version: number }>({
@@ -242,7 +243,7 @@ export const {
     useGetInvoicesQuery,
     useGetInvoiceQuery,
     useCreateInvoiceMutation,
-    useUpdateLineItemsMutation,
+    useUpdateInvoiceMutation,
     useSendInvoiceMutation,
     useCancelInvoiceMutation,
     useMarkInvoicePaidMutation,

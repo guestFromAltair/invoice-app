@@ -305,18 +305,27 @@ class InvoiceServiceTest {
     class Modifications {
 
         @Test
-        @DisplayName("should update line items for DRAFT invoice when version matches")
-        void should_update_line_items() {
+        @DisplayName("should update invoice metadata and line items for DRAFT invoice when version matches")
+        void should_update_invoice() {
             Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 4L);
             invoice.getLineItems().add(new LineItem());
 
             when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
 
+            LocalDate newIssue = LocalDate.of(2026, 5, 19);
+            LocalDate newDue = LocalDate.of(2026, 6, 19);
+            BigDecimal newTax = new BigDecimal("0.10");
+            String newNotes = "Updated billing info";
             List<InvoiceService.LineItemRequest> newItems = List.of(
                     new InvoiceService.LineItemRequest("New Item", BigDecimal.ONE, BigDecimal.TEN, BigDecimal.ZERO, 1)
             );
 
-            var response = invoiceService.updateLineItems(invoice.getId(), 4L, newItems);
+            var response = invoiceService.update(invoice.getId(), 4L, newIssue, newDue, newTax, newNotes, newItems);
+
+            assertThat(response.issueDate()).isEqualTo(newIssue);
+            assertThat(response.dueDate()).isEqualTo(newDue);
+            assertThat(response.taxRate()).isEqualByComparingTo(newTax);
+            assertThat(response.notes()).isEqualTo(newNotes);
 
             assertThat(response.lineItems()).hasSize(1);
             assertThat(response.lineItems().getFirst().description()).isEqualTo("New Item");
@@ -324,12 +333,12 @@ class InvoiceServiceTest {
         }
 
         @Test
-        @DisplayName("should throw OptimisticLockingFailureException on stale line item edit requests")
-        void should_throw_optimistic_lock_on_line_item_edit() {
+        @DisplayName("should throw OptimisticLockingFailureException on stale invoice edit requests")
+        void should_throw_optimistic_lock_on_invoice_edit() {
             Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 4L);
             when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
 
-            assertThatThrownBy(() -> invoiceService.updateLineItems(invoice.getId(), 3L, List.of()))
+            assertThatThrownBy(() -> invoiceService.update(invoice.getId(), 3L, LocalDate.now(), LocalDate.now().plusDays(10), BigDecimal.ZERO, null, List.of()))
                     .isInstanceOf(ObjectOptimisticLockingFailureException.class);
         }
 
@@ -339,9 +348,31 @@ class InvoiceServiceTest {
             Invoice invoice = buildInvoice(InvoiceStatus.SENT, 1L);
             when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
 
-            assertThatThrownBy(() -> invoiceService.updateLineItems(invoice.getId(), 1L, List.of()))
+            assertThatThrownBy(() -> invoiceService.update(invoice.getId(), 1L, LocalDate.now(), LocalDate.now().plusDays(10), BigDecimal.ZERO, null, List.of()))
                     .isInstanceOf(InvoiceAppException.class)
                     .hasMessageContaining("Only DRAFT invoices can be edited");
+        }
+
+        @Test
+        @DisplayName("should reject invoice updates when due date is before issue date")
+        void should_reject_invoice_update_with_invalid_dates() {
+            Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 1L);
+            when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
+
+            LocalDate badIssue = LocalDate.of(2026, 6, 19);
+            LocalDate badDue = LocalDate.of(2026, 5, 19);
+
+            assertThatThrownBy(() -> invoiceService.update(
+                    invoice.getId(),
+                    1L,
+                    badIssue,
+                    badDue,
+                    BigDecimal.ZERO,
+                    null,
+                    List.of()
+            ))
+                    .isInstanceOf(InvoiceAppException.class)
+                    .hasMessageContaining("Due date cannot be before issue date");
         }
     }
 

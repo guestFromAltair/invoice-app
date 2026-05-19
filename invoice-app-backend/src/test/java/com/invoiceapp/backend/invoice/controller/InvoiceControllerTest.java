@@ -186,12 +186,16 @@ class InvoiceControllerTest {
 
     @Test
     @WithMockUser
-    @DisplayName("PUT /api/invoices/{id}/line-items should return 200 on successful collection update with version check")
-    void updateLineItems_returns_200() throws Exception {
+    @DisplayName("PUT /api/invoices/{id} should return 200 on successful full update")
+    void update_invoice_returns_200() throws Exception {
         UUID id = UUID.randomUUID();
-        String wrapperPayload = """
+        String fullUpdatePayload = """
                 {
                     "version": 3,
+                    "issueDate": "2026-05-19",
+                    "dueDate": "2026-06-19",
+                    "taxRate": 0.20,
+                    "notes": "Updated terms",
                     "lineItems": [
                         {
                             "description": "Consulting Work",
@@ -204,23 +208,35 @@ class InvoiceControllerTest {
                 }
                 """;
 
-        when(invoiceService.updateLineItems(eq(id), eq(3L), anyList())).thenReturn(buildMockResponse(id, 4L));
+        when(invoiceService.update(
+                eq(id),
+                eq(3L),
+                any(LocalDate.class),
+                any(LocalDate.class),
+                any(BigDecimal.class),
+                anyString(),
+                anyList()
+        )).thenReturn(buildMockResponse(id, 4L));
 
-        mockMvc.perform(put("/api/invoices/{id}/line-items", id)
+        mockMvc.perform(put("/api/invoices/{id}", id)
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(wrapperPayload))
+                        .content(fullUpdatePayload))
                 .andExpect(status().isOk());
     }
 
     @Test
     @WithMockUser
-    @DisplayName("PUT /api/invoices/{id}/line-items should return 409 Conflict when out-of-sync")
-    void updateLineItems_returns_409_on_concurrency_failure() throws Exception {
+    @DisplayName("PUT /api/invoices/{id} should return 409 Conflict when out-of-sync")
+    void update_invoice_returns_409_on_concurrency_failure() throws Exception {
         UUID id = UUID.randomUUID();
-        String wrapperPayload = """
+        String fullUpdatePayload = """
                 {
                     "version": 2,
+                    "issueDate": "2026-05-19",
+                    "dueDate": "2026-06-19",
+                    "taxRate": 0.20,
+                    "notes": "Stale edit",
                     "lineItems": [
                         {
                             "description": "Consulting Work",
@@ -233,13 +249,20 @@ class InvoiceControllerTest {
                 }
                 """;
 
-        when(invoiceService.updateLineItems(eq(id), eq(2L), anyList()))
-                .thenThrow(new ObjectOptimisticLockingFailureException(Invoice.class, id));
+        when(invoiceService.update(
+                eq(id),
+                eq(2L),
+                any(LocalDate.class),
+                any(LocalDate.class),
+                any(BigDecimal.class),
+                anyString(),
+                anyList()
+        )).thenThrow(new ObjectOptimisticLockingFailureException(Invoice.class, id));
 
-        mockMvc.perform(put("/api/invoices/{id}/line-items", id)
+        mockMvc.perform(put("/api/invoices/{id}", id)
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(wrapperPayload))
+                        .content(fullUpdatePayload))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.title").value("Concurrent modification"))
                 .andExpect(jsonPath("$.type").value("OPTIMISTIC_LOCK_FAILURE"));

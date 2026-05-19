@@ -90,8 +90,17 @@ export interface LineItemRequest {
     position: number;
 }
 
-export interface InvoiceRequest {
+export interface CreateInvoiceRequest {
     clientId: string;
+    issueDate: string;
+    dueDate: string;
+    taxRate: number;
+    notes?: string;
+    lineItems: LineItemRequest[];
+}
+
+export interface UpdateInvoiceRequest {
+    version: number;
     issueDate: string;
     dueDate: string;
     taxRate: number;
