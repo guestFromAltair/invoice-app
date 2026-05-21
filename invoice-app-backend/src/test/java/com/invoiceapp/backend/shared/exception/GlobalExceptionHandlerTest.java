@@ -1,12 +1,14 @@
 package com.invoiceapp.backend.shared.exception;
 
 import com.invoiceapp.backend.client.domain.Client;
+import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -154,5 +156,17 @@ class GlobalExceptionHandlerTest {
         assertThat(detail.getStatus()).isEqualTo(400);
         assertThat(detail.getTitle()).isEqualTo("Missing request parameter");
         assertThat(detail.getDetail()).isEqualTo("Required query parameter 'clientId' is missing.");
+    }
+
+    @Test
+    @DisplayName("should return 403 Forbidden when an AuthorizationDeniedException is thrown")
+    void should_handle_authorization_denied_exception() {
+        AuthorizationDeniedException ex = new AuthorizationDeniedException("Access Denied");
+
+        ProblemDetail detail = handler.handleAuthorizationDeniedException(ex);
+
+        Assertions.assertThat(detail.getStatus()).isEqualTo(403);
+        Assertions.assertThat(detail.getTitle()).isEqualTo("Access Denied");
+        Assertions.assertThat(detail.getDetail()).isEqualTo("You do not have permission to access this resource.");
     }
 }

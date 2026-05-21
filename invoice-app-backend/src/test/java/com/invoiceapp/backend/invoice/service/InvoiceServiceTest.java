@@ -1,13 +1,15 @@
 package com.invoiceapp.backend.invoice.service;
 
 import com.invoiceapp.backend.auth.domain.User;
-import com.invoiceapp.backend.auth.domain.UserRepository;
 import com.invoiceapp.backend.client.domain.Client;
 import com.invoiceapp.backend.client.domain.ClientRepository;
 import com.invoiceapp.backend.invoice.domain.*;
 import com.invoiceapp.backend.notification.service.NotificationService;
+import com.invoiceapp.backend.shared.audit.AuditAction;
+import com.invoiceapp.backend.shared.audit.AuditService;
 import com.invoiceapp.backend.shared.exception.InvoiceAppException;
 import com.invoiceapp.backend.shared.metrics.InvoiceMetrics;
+import com.invoiceapp.backend.shared.security.CurrentUserResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -20,14 +22,13 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -44,16 +45,19 @@ class InvoiceServiceTest {
     @Mock
     private ClientRepository clientRepository;
     @Mock
-    private UserRepository userRepository;
+    private CurrentUserResolver currentUserResolver;
     @Mock
     private PaymentRepository paymentRepository;
     @Mock
     private InvoiceMetrics invoiceMetrics;
     @Mock
     private NotificationService notificationService;
+    @Mock
+    private AuditService auditService;
 
     @InjectMocks
     private InvoiceService invoiceService;
+
     private User testUser;
     private Client testClient;
     private UUID userId;
@@ -78,13 +82,37 @@ class InvoiceServiceTest {
                 .email("billing@acme.com")
                 .build();
 
-        Authentication authentication = mock(Authentication.class);
-        SecurityContext securityContext = mock(SecurityContext.class);
-        when(securityContext.getAuthentication()).thenReturn(authentication);
-        when(authentication.getName()).thenReturn("test@example.com");
-        SecurityContextHolder.setContext(securityContext);
+        lenient().when(currentUserResolver.resolveUser()).thenReturn(testUser);
+    }
 
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(testUser));
+    private Invoice buildInvoice(InvoiceStatus status, Long version) {
+        Invoice invoice = Invoice.builder()
+                .id(UUID.randomUUID())
+                .invoiceNumber("INV-2026-00001")
+                .client(testClient)
+                .createdBy(testUser)
+                .status(status)
+                .issueDate(LocalDate.now())
+                .dueDate(LocalDate.now().plusDays(30))
+                .taxRate(new BigDecimal("0.20"))
+                .notes("Original Notes")
+                .createdAt(Instant.now())
+                .lineItems(new ArrayList<>())
+                .version(version)
+                .build();
+
+        LineItem li = LineItem.builder()
+                .invoice(invoice)
+                .description("Consulting")
+                .quantity(new BigDecimal("10"))
+                .unitPrice(new BigDecimal("276.00"))
+                .discountPct(BigDecimal.ZERO)
+                .position(1)
+                .build();
+        li.computeLineTotal();
+        invoice.getLineItems().add(li);
+        invoice.recalculateTotals();
+        return invoice;
     }
 
     @Nested
@@ -92,28 +120,41 @@ class InvoiceServiceTest {
     class StateTransitions {
 
         @Test
-        @DisplayName("should transition from DRAFT to SENT successfully when version matches")
+        @DisplayName("should transition from DRAFT to SENT successfully and log workflow audit event")
         void should_transition_draft_to_sent() {
             Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 2L);
             when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
+            when(invoiceRepository.computeOutstandingBalance()).thenReturn(BigDecimal.ZERO);
 
             InvoiceService.InvoiceResponse response = invoiceService.send(invoice.getId(), 2L);
 
             assertThat(response.status()).isEqualTo(InvoiceStatus.SENT);
+
+            verify(auditService, times(1)).log(
+                    eq("INVOICE"),
+                    eq(invoice.getId()),
+                    eq(AuditAction.INVOICE_SENT),
+                    eq(Map.of("status", "DRAFT")),
+                    eq(Map.of("status", "SENT")),
+                    eq(userId)
+            );
+            verify(notificationService).sendStatusChange(userId, "INV-2026-00001", invoice.getId().toString(), "SENT");
         }
 
         @Test
-        @DisplayName("should throw OptimisticLockingFailureException on out-of-sync transition push")
+        @DisplayName("should throw OptimisticLockingFailureException on out-of-sync transition push and skip audit steps")
         void should_throw_optimistic_lock_on_transition() {
             Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 2L);
             when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
 
-            assertThatThrownBy(() -> invoiceService.send(invoice.getId(), 1L)) // Passing stale version 1 instead of 2
-                    .isInstanceOf(org.springframework.orm.ObjectOptimisticLockingFailureException.class);
+            assertThatThrownBy(() -> invoiceService.send(invoice.getId(), 1L))
+                    .isInstanceOf(ObjectOptimisticLockingFailureException.class);
+
+            verifyNoInteractions(auditService);
         }
 
         @Test
-        @DisplayName("should throw when transitioning PAID invoice to any status")
+        @DisplayName("should throw when transitioning PAID invoice to any status and skip audit")
         void should_throw_when_transitioning_paid_invoice() {
             Invoice invoice = buildInvoice(InvoiceStatus.PAID, 0L);
             when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
@@ -121,10 +162,12 @@ class InvoiceServiceTest {
             assertThatThrownBy(() -> invoiceService.send(invoice.getId(), 0L))
                     .isInstanceOf(InvoiceAppException.class)
                     .hasMessageContaining("Cannot transition invoice from PAID");
+
+            verifyNoInteractions(auditService);
         }
 
         @Test
-        @DisplayName("should throw when transitioning CANCELLED invoice")
+        @DisplayName("should throw when transitioning CANCELLED invoice and skip audit")
         void should_throw_when_transitioning_cancelled_invoice() {
             Invoice invoice = buildInvoice(InvoiceStatus.CANCELLED, 0L);
             when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
@@ -132,6 +175,8 @@ class InvoiceServiceTest {
             assertThatThrownBy(() -> invoiceService.send(invoice.getId(), 0L))
                     .isInstanceOf(InvoiceAppException.class)
                     .hasMessageContaining("Cannot transition invoice from CANCELLED");
+
+            verifyNoInteractions(auditService);
         }
 
         @Test
@@ -143,10 +188,12 @@ class InvoiceServiceTest {
             assertThatThrownBy(() -> invoiceService.send(randomId, 0L))
                     .isInstanceOf(InvoiceAppException.class)
                     .hasMessageContaining("Invoice not found");
+
+            verifyNoInteractions(auditService);
         }
 
         @Test
-        @DisplayName("should allow OVERDUE invoice to be marked PAID")
+        @DisplayName("should allow OVERDUE invoice to be marked PAID and log transition audit record")
         void should_allow_overdue_invoice_to_be_marked_paid() {
             Invoice invoice = buildInvoice(InvoiceStatus.OVERDUE, 0L);
 
@@ -157,6 +204,15 @@ class InvoiceServiceTest {
             InvoiceService.InvoiceResponse response = invoiceService.markPaid(invoice.getId(), 0L);
 
             assertThat(response.status()).isEqualTo(InvoiceStatus.PAID);
+
+            verify(auditService, times(1)).log(
+                    eq("INVOICE"),
+                    eq(invoice.getId()),
+                    eq(AuditAction.INVOICE_PAID),
+                    eq(Map.of("status", "OVERDUE")),
+                    eq(Map.of("status", "PAID")),
+                    eq(userId)
+            );
         }
 
         @Test
@@ -176,6 +232,15 @@ class InvoiceServiceTest {
                     payment.getAmount().compareTo(new BigDecimal("3312.0000")) == 0
                             && "MANUAL_MARK_PAID".equals(payment.getMethod())
             ));
+
+            verify(auditService, times(1)).log(
+                    eq("INVOICE"),
+                    eq(invoice.getId()),
+                    eq(AuditAction.INVOICE_PAID),
+                    eq(Map.of("status", "SENT")),
+                    eq(Map.of("status", "PAID")),
+                    eq(userId)
+            );
         }
 
         @Test
@@ -200,33 +265,32 @@ class InvoiceServiceTest {
     class Calculations {
 
         @Test
-        @DisplayName("should calculate totals correctly with tax and discount")
+        @DisplayName("should calculate totals correctly with tax and discount and save initial state snapshot")
         void should_calculate_totals_correctly() {
+            UUID invoiceId = UUID.randomUUID();
+            Instant now = Instant.now();
+            LocalDate issueDate = LocalDate.now();
+            LocalDate dueDate = LocalDate.now().plusDays(30);
+
             when(clientRepository.findByIdAndOwnerId(clientId, userId)).thenReturn(Optional.of(testClient));
             when(invoiceRepository.nextInvoiceSequence()).thenReturn(1L);
-            when(invoiceRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+            when(invoiceRepository.save(any())).thenAnswer(inv -> {
+                Invoice i = inv.getArgument(0);
+                i.setId(invoiceId);
+                i.setCreatedAt(now);
+                i.setStatus(InvoiceStatus.DRAFT);
+                return i;
+            });
 
             InvoiceService.InvoiceRequest request = new InvoiceService.InvoiceRequest(
                     clientId,
-                    LocalDate.now(),
-                    LocalDate.now().plusDays(30),
+                    issueDate,
+                    dueDate,
                     new BigDecimal("0.20"),
                     "Test invoice",
                     List.of(
-                            new InvoiceService.LineItemRequest(
-                                    "Frontend development",
-                                    new BigDecimal("10"),
-                                    new BigDecimal("150.00"),
-                                    new BigDecimal("0.00"),
-                                    1
-                            ),
-                            new InvoiceService.LineItemRequest(
-                                    "Backend development",
-                                    new BigDecimal("8"),
-                                    new BigDecimal("175.00"),
-                                    new BigDecimal("0.10"),
-                                    2
-                            )
+                            new InvoiceService.LineItemRequest("Frontend development", new BigDecimal("10"), new BigDecimal("150.00"), new BigDecimal("0.00"), 1),
+                            new InvoiceService.LineItemRequest("Backend development", new BigDecimal("8"), new BigDecimal("175.00"), new BigDecimal("0.10"), 2)
                     )
             );
 
@@ -235,6 +299,22 @@ class InvoiceServiceTest {
             assertThat(response.subtotal()).isEqualByComparingTo(new BigDecimal("2760.0000"));
             assertThat(response.taxAmount()).isEqualByComparingTo(new BigDecimal("552.0000"));
             assertThat(response.total()).isEqualByComparingTo(new BigDecimal("3312.0000"));
+
+            verify(auditService, times(1)).log(
+                    eq("INVOICE"),
+                    eq(invoiceId),
+                    eq(AuditAction.INVOICE_CREATED),
+                    isNull(),
+                    argThat(state -> {
+                        if (!(state instanceof Map<?, ?> stateMap)) return false;
+                        var lines = stateMap.get("lineItems");
+                        return "DRAFT".equals(stateMap.get("status")) &&
+                                "2760.0000".equals(stateMap.get("subtotal")) &&
+                                "3312.0000".equals(stateMap.get("total")) &&
+                                lines instanceof List<?> list && list.size() == 2;
+                    }),
+                    eq(userId)
+            );
         }
 
         @Test
@@ -244,8 +324,8 @@ class InvoiceServiceTest {
 
             InvoiceService.InvoiceRequest request = new InvoiceService.InvoiceRequest(
                     clientId,
-                    LocalDate.of(2024, 2, 15),
-                    LocalDate.of(2024, 1, 15),
+                    LocalDate.of(2026, 2, 15),
+                    LocalDate.of(2026, 1, 15),
                     BigDecimal.ZERO,
                     null,
                     List.of(new InvoiceService.LineItemRequest("Test", BigDecimal.ONE, BigDecimal.TEN, BigDecimal.ZERO, 1))
@@ -254,6 +334,8 @@ class InvoiceServiceTest {
             assertThatThrownBy(() -> invoiceService.create(request))
                     .isInstanceOf(InvoiceAppException.class)
                     .hasMessageContaining("Due date cannot be before issue date");
+
+            verifyNoInteractions(auditService);
         }
     }
 
@@ -262,7 +344,7 @@ class InvoiceServiceTest {
     class Retrieval {
 
         @Test
-        @DisplayName("should find all invoices with filters")
+        @DisplayName("should find all invoices with filters without writing an audit record")
         void should_find_all_invoices() {
             Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 0L);
             Page<Invoice> page = new PageImpl<>(List.of(invoice));
@@ -272,11 +354,11 @@ class InvoiceServiceTest {
             var result = invoiceService.findAll(InvoiceStatus.DRAFT, clientId, Pageable.unpaged());
 
             assertThat(result.getContent()).hasSize(1);
-            assertThat(result.getContent().getFirst().invoiceNumber()).isEqualTo(invoice.getInvoiceNumber());
+            verifyNoInteractions(auditService);
         }
 
         @Test
-        @DisplayName("should find invoice by id")
+        @DisplayName("should find invoice by id without writing an audit record")
         void should_find_by_id() {
             Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 0L);
             when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
@@ -284,11 +366,12 @@ class InvoiceServiceTest {
             var result = invoiceService.findById(invoice.getId());
 
             assertThat(result.id()).isEqualTo(invoice.getId());
+            verifyNoInteractions(auditService);
         }
     }
 
     @Test
-    @DisplayName("should cancel invoice successfully")
+    @DisplayName("should cancel invoice successfully and log transition event")
     void should_cancel_invoice() {
         Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 0L);
         when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
@@ -298,6 +381,15 @@ class InvoiceServiceTest {
 
         assertThat(response.status()).isEqualTo(InvoiceStatus.CANCELLED);
         verify(invoiceMetrics).recordStatusTransition(InvoiceStatus.CANCELLED);
+
+        verify(auditService, times(1)).log(
+                eq("INVOICE"),
+                eq(invoice.getId()),
+                eq(AuditAction.INVOICE_CANCELLED),
+                eq(Map.of("status", "DRAFT")),
+                eq(Map.of("status", "CANCELLED")),
+                eq(userId)
+        );
     }
 
     @Nested
@@ -305,10 +397,9 @@ class InvoiceServiceTest {
     class Modifications {
 
         @Test
-        @DisplayName("should update invoice metadata and line items for DRAFT invoice when version matches")
+        @DisplayName("should update invoice metadata and log deep structured snapshots of object mutations")
         void should_update_invoice() {
             Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 4L);
-            invoice.getLineItems().add(new LineItem());
 
             when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
 
@@ -326,10 +417,16 @@ class InvoiceServiceTest {
             assertThat(response.dueDate()).isEqualTo(newDue);
             assertThat(response.taxRate()).isEqualByComparingTo(newTax);
             assertThat(response.notes()).isEqualTo(newNotes);
-
             assertThat(response.lineItems()).hasSize(1);
-            assertThat(response.lineItems().getFirst().description()).isEqualTo("New Item");
-            verify(invoiceRepository, never()).save(any());
+
+            verify(auditService, times(1)).log(
+                    eq("INVOICE"),
+                    eq(invoice.getId()),
+                    eq(AuditAction.INVOICE_UPDATED),
+                    argThat(oldState -> oldState instanceof Map<?, ?> m && "Original Notes".equals(m.get("notes"))),
+                    argThat(newState -> newState instanceof Map<?, ?> m && "Updated billing info".equals(m.get("notes"))),
+                    eq(userId)
+            );
         }
 
         @Test
@@ -343,14 +440,10 @@ class InvoiceServiceTest {
             );
 
             assertThatThrownBy(() -> invoiceService.update(
-                    invoice.getId(),
-                    3L,
-                    LocalDate.now(),
-                    LocalDate.now().plusDays(10),
-                    BigDecimal.ZERO,
-                    null,
-                    validItems
+                    invoice.getId(), 3L, LocalDate.now(), LocalDate.now().plusDays(10), BigDecimal.ZERO, null, validItems
             )).isInstanceOf(ObjectOptimisticLockingFailureException.class);
+
+            verifyNoInteractions(auditService);
         }
 
         @Test
@@ -364,92 +457,81 @@ class InvoiceServiceTest {
             );
 
             assertThatThrownBy(() -> invoiceService.update(
-                    invoice.getId(),
-                    1L,
-                    LocalDate.now(),
-                    LocalDate.now().plusDays(10),
-                    BigDecimal.ZERO,
-                    null,
-                    validItems
-            )).isInstanceOf(InvoiceAppException.class)
-                    .hasMessageContaining("Only DRAFT invoices can be edited");
+                    invoice.getId(), 1L, LocalDate.now(), LocalDate.now().plusDays(10), BigDecimal.ZERO, null, validItems
+            )).isInstanceOf(InvoiceAppException.class);
+
+            verifyNoInteractions(auditService);
         }
 
         @Test
-        @DisplayName("should reject invoice updates when due date is before issue date")
-        void should_reject_invoice_update_with_invalid_dates() {
+        @DisplayName("should completely skip optimistic lock validation check when version parameter is null")
+        void should_skip_optimistic_lock_check_when_version_is_null() {
+            Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 4L);
+            when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
+
+            LocalDate newIssue = LocalDate.now();
+            LocalDate newDue = LocalDate.now().plusDays(30);
+            List<InvoiceService.LineItemRequest> validItems = List.of(
+                    new InvoiceService.LineItemRequest("Test Item", BigDecimal.ONE, BigDecimal.TEN, BigDecimal.ZERO, 1)
+            );
+
+            var response = invoiceService.update(
+                    invoice.getId(), null, newIssue, newDue, BigDecimal.ZERO, "No lock parameter provided", validItems
+            );
+
+            assertThat(response).isNotNull();
+            assertThat(response.notes()).isEqualTo("No lock parameter provided");
+        }
+
+        @Test
+        @DisplayName("should throw Unprocessable Content Exception when line items collection is null")
+        void should_throw_when_line_items_null_on_update() {
             Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 1L);
             when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
 
-            LocalDate badIssue = LocalDate.of(2026, 6, 19);
-            LocalDate badDue = LocalDate.of(2026, 5, 19);
+            assertThatThrownBy(() -> invoiceService.update(
+                    invoice.getId(), 1L, LocalDate.now(), LocalDate.now().plusDays(10), BigDecimal.ZERO, "No items", null
+            )).isInstanceOf(InvoiceAppException.class)
+                    .hasMessageContaining("An invoice must contain at least one line item");
+
+            verifyNoInteractions(auditService);
+        }
+
+        @Test
+        @DisplayName("should throw Unprocessable Content Exception when line items collection is empty")
+        void should_throw_when_line_items_empty_on_update() {
+            Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 1L);
+            when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
 
             assertThatThrownBy(() -> invoiceService.update(
-                    invoice.getId(),
-                    1L,
-                    badIssue,
-                    badDue,
-                    BigDecimal.ZERO,
-                    null,
-                    List.of()
+                    invoice.getId(), 1L, LocalDate.now(), LocalDate.now().plusDays(10), BigDecimal.ZERO, "Empty items", List.of()
+            ))
+                    .isInstanceOf(InvoiceAppException.class)
+                    .hasMessageContaining("An invoice must contain at least one line item");
+
+            verifyNoInteractions(auditService);
+        }
+
+        @Test
+        @DisplayName("should throw Unprocessable Content Exception when update request due date is before issue date")
+        void should_throw_when_due_date_before_issue_date_on_update() {
+            Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 1L);
+            when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
+
+            LocalDate invalidIssueDate = LocalDate.of(2026, 5, 20);
+            LocalDate invalidDueDate = LocalDate.of(2026, 5, 10);
+
+            List<InvoiceService.LineItemRequest> validItems = List.of(
+                    new InvoiceService.LineItemRequest("Test Item", BigDecimal.ONE, BigDecimal.TEN, BigDecimal.ZERO, 1)
+            );
+
+            assertThatThrownBy(() -> invoiceService.update(
+                    invoice.getId(), 1L, invalidIssueDate, invalidDueDate, BigDecimal.ZERO, "Invalid Dates", validItems
             ))
                     .isInstanceOf(InvoiceAppException.class)
                     .hasMessageContaining("Due date cannot be before issue date");
+
+            verifyNoInteractions(auditService);
         }
-    }
-
-    @Test
-    @DisplayName("should reject invoice updates when line items list is empty")
-    void should_reject_invoice_update_with_empty_line_items() {
-        Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 1L);
-        when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
-
-        assertThatThrownBy(() -> invoiceService.update(
-                invoice.getId(),
-                1L,
-                LocalDate.now(),
-                LocalDate.now().plusDays(10),
-                BigDecimal.ZERO,
-                null,
-                List.of()
-        )).isInstanceOf(InvoiceAppException.class)
-                .hasMessageContaining("An invoice must contain at least one line item");
-    }
-
-    @Test
-    @DisplayName("should reject invoice updates when line items list is null")
-    void should_reject_invoice_update_with_null_line_items() {
-        Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 1L);
-        when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
-
-        assertThatThrownBy(() -> invoiceService.update(
-                invoice.getId(),
-                1L,
-                LocalDate.now(),
-                LocalDate.now().plusDays(10),
-                BigDecimal.ZERO,
-                null,
-                null
-        )).isInstanceOf(InvoiceAppException.class)
-                .hasMessageContaining("An invoice must contain at least one line item");
-    }
-
-    private Invoice buildInvoice(InvoiceStatus status, Long version) {
-        return Invoice.builder()
-                .id(UUID.randomUUID())
-                .invoiceNumber("INV-2024-00001")
-                .client(testClient)
-                .createdBy(testUser)
-                .status(status)
-                .issueDate(LocalDate.now())
-                .dueDate(LocalDate.now().plusDays(30))
-                .subtotal(new BigDecimal("2760.0000"))
-                .taxRate(new BigDecimal("0.2000"))
-                .taxAmount(new BigDecimal("552.0000"))
-                .total(new BigDecimal("3312.0000"))
-                .lineItems(new ArrayList<>())
-                .payments(new ArrayList<>())
-                .version(version)
-                .build();
     }
 }

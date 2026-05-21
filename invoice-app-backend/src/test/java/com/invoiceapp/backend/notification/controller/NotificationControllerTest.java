@@ -4,6 +4,7 @@ import com.invoiceapp.backend.auth.domain.User;
 import com.invoiceapp.backend.auth.domain.UserRepository;
 import com.invoiceapp.backend.auth.service.JwtService;
 import com.invoiceapp.backend.notification.service.NotificationService;
+import com.invoiceapp.backend.shared.security.CurrentUserResolver;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +38,9 @@ class NotificationControllerTest {
     @MockitoBean
     private JwtService jwtService;
 
+    @MockitoBean
+    private CurrentUserResolver currentUserResolver;
+
     @Test
     @WithMockUser(username = "test@example.com")
     @DisplayName("GET /api/notifications/stream should call service with correct userId")
@@ -46,7 +50,7 @@ class NotificationControllerTest {
         mockUser.setId(mockUserId);
         mockUser.setEmail("test@example.com");
 
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(mockUser));
+        when(currentUserResolver.resolveUser()).thenReturn(mockUser);
         when(notificationService.createConnection(mockUserId)).thenReturn(new SseEmitter());
 
         mockMvc.perform(get("/api/notifications/stream"))
