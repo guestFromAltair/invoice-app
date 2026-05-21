@@ -2,10 +2,12 @@ package com.invoiceapp.backend.client.service;
 
 import com.invoiceapp.backend.auth.domain.Role;
 import com.invoiceapp.backend.auth.domain.User;
-import com.invoiceapp.backend.auth.domain.UserRepository;
 import com.invoiceapp.backend.client.domain.Client;
 import com.invoiceapp.backend.client.domain.ClientRepository;
+import com.invoiceapp.backend.shared.audit.AuditAction;
+import com.invoiceapp.backend.shared.audit.AuditService;
 import com.invoiceapp.backend.shared.exception.InvoiceAppException;
+import com.invoiceapp.backend.shared.security.CurrentUserResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -17,11 +19,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -36,7 +37,9 @@ class ClientServiceTest {
     @Mock
     private ClientRepository clientRepository;
     @Mock
-    private UserRepository userRepository;
+    private CurrentUserResolver currentUserResolver;
+    @Mock
+    private AuditService auditService;
 
     @InjectMocks
     private ClientService clientService;
@@ -54,13 +57,7 @@ class ClientServiceTest {
                 .role(Role.USER)
                 .build();
 
-        Authentication authentication = mock(Authentication.class);
-        when(authentication.getName()).thenReturn("test@example.com");
-        SecurityContext securityContext = mock(SecurityContext.class);
-        when(securityContext.getAuthentication()).thenReturn(authentication);
-        SecurityContextHolder.setContext(securityContext);
-
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(testUser));
+        lenient().when(currentUserResolver.resolveUser()).thenReturn(testUser);
     }
 
     @Nested
@@ -68,14 +65,16 @@ class ClientServiceTest {
     class CreateClient {
 
         @Test
-        @DisplayName("should create a client successfully")
+        @DisplayName("should create a client successfully and log audit creation event")
         void should_create_client_successfully() {
-            when(clientRepository.existsByEmailAndOwnerId(
-                    "client@acme.com", userId))
-                    .thenReturn(false);
+            UUID clientId = UUID.randomUUID();
+            Instant now = Instant.now();
+
+            when(clientRepository.existsByEmailAndOwnerId("client@acme.com", userId)).thenReturn(false);
             when(clientRepository.save(any())).thenAnswer(inv -> {
                 Client c = inv.getArgument(0);
-                c.setId(UUID.randomUUID());
+                c.setId(clientId);
+                c.setCreatedAt(now);
                 return c;
             });
 
@@ -92,17 +91,23 @@ class ClientServiceTest {
 
             assertThat(response.name()).isEqualTo("Acme Corp");
             assertThat(response.email()).isEqualTo("client@acme.com");
-            verify(clientRepository).save(argThat(client ->
-                    testUser.equals(client.getOwner())
-            ));
+
+            verify(clientRepository).save(argThat(client -> testUser.equals(client.getOwner())));
+
+            verify(auditService, times(1)).log(
+                    eq("CLIENT"),
+                    eq(clientId),
+                    eq(AuditAction.CLIENT_CREATED),
+                    isNull(),
+                    eq(Map.of("owner", "test@example.com", "name", "Acme Corp", "createdAt", now.toString())),
+                    eq(userId)
+            );
         }
 
         @Test
-        @DisplayName("should throw 409 when client email already exists for this user")
+        @DisplayName("should throw 409 when client email already exists and skip audit trail logs")
         void should_throw_conflict_for_duplicate_email() {
-            when(clientRepository.existsByEmailAndOwnerId(
-                    "duplicate@acme.com", userId))
-                    .thenReturn(true);
+            when(clientRepository.existsByEmailAndOwnerId("duplicate@acme.com", userId)).thenReturn(true);
 
             assertThatThrownBy(() -> clientService.create(
                     new ClientService.ClientRequest(
@@ -115,6 +120,7 @@ class ClientServiceTest {
                     .hasMessageContaining("already exists");
 
             verify(clientRepository, never()).save(any());
+            verifyNoInteractions(auditService);
         }
     }
 
@@ -123,12 +129,13 @@ class ClientServiceTest {
     class FindClients {
 
         @Test
-        @DisplayName("should return only clients belonging to the current user")
+        @DisplayName("should return only clients belonging to the current user and bypass audit service entirely")
         void should_return_only_current_user_clients() {
             Client client = Client.builder()
                     .id(UUID.randomUUID())
                     .owner(testUser)
                     .name("My Client")
+                    .createdAt(Instant.now())
                     .build();
 
             var pageable = PageRequest.of(0, 20);
@@ -140,6 +147,7 @@ class ClientServiceTest {
             assertThat(result.getContent().getFirst().name()).isEqualTo("My Client");
 
             verify(clientRepository).findAllByOwnerId(userId, pageable);
+            verifyNoInteractions(auditService);
         }
 
         @Test
@@ -151,6 +159,8 @@ class ClientServiceTest {
             assertThatThrownBy(() -> clientService.findById(randomId))
                     .isInstanceOf(InvoiceAppException.class)
                     .hasMessageContaining("not found");
+
+            verifyNoInteractions(auditService);
         }
     }
 
@@ -159,20 +169,24 @@ class ClientServiceTest {
     class UpdateClient {
 
         @Test
-        @DisplayName("should update client fields correctly")
+        @DisplayName("should update client fields correctly and track old vs new state transformations")
         void should_update_client_fields() {
+            UUID clientId = UUID.randomUUID();
+            Instant now = Instant.now();
+
             Client existing = Client.builder()
-                    .id(UUID.randomUUID())
+                    .id(clientId)
                     .owner(testUser)
                     .name("Old Name")
                     .email("old@acme.com")
+                    .createdAt(now)
                     .version(1L)
                     .build();
 
-            when(clientRepository.findByIdAndOwnerId(existing.getId(), userId)).thenReturn(Optional.of(existing));
+            when(clientRepository.findByIdAndOwnerId(clientId, userId)).thenReturn(Optional.of(existing));
 
             ClientService.ClientResponse response = clientService.update(
-                    existing.getId(),
+                    clientId,
                     new ClientService.ClientRequest(
                             "New Name",
                             "new@acme.com",
@@ -182,7 +196,15 @@ class ClientServiceTest {
 
             assertThat(response.name()).isEqualTo("New Name");
             assertThat(response.email()).isEqualTo("new@acme.com");
-            assertThat(response.version()).isEqualTo(1L);
+
+            verify(auditService, times(1)).log(
+                    eq("CLIENT"),
+                    eq(clientId),
+                    eq(AuditAction.CLIENT_UPDATED),
+                    eq(Map.of("owner", "test@example.com", "name", "Old Name", "createdAt", now.toString())),
+                    eq(Map.of("owner", "test@example.com", "name", "New Name", "createdAt", now.toString())),
+                    eq(userId)
+            );
         }
     }
 
@@ -191,23 +213,36 @@ class ClientServiceTest {
     class DeleteClient {
 
         @Test
-        @DisplayName("should delete client when found")
+        @DisplayName("should delete client when found and register a terminal deletion audit row")
         void should_delete_client_when_found() {
+            UUID clientId = UUID.randomUUID();
+            Instant now = Instant.now();
+
             Client client = Client.builder()
-                    .id(UUID.randomUUID())
+                    .id(clientId)
                     .owner(testUser)
                     .name("To Delete")
+                    .createdAt(now)
                     .build();
 
-            when(clientRepository.findByIdAndOwnerId(client.getId(), userId)).thenReturn(Optional.of(client));
+            when(clientRepository.findByIdAndOwnerId(clientId, userId)).thenReturn(Optional.of(client));
 
-            clientService.delete(client.getId());
+            clientService.delete(clientId);
 
             verify(clientRepository).delete(client);
+
+            verify(auditService, times(1)).log(
+                    eq("CLIENT"),
+                    eq(clientId),
+                    eq(AuditAction.CLIENT_DELETED),
+                    eq(Map.of("owner", "test@example.com", "name", "To Delete", "createdAt", now.toString())),
+                    isNull(),
+                    eq(userId)
+            );
         }
 
         @Test
-        @DisplayName("should throw 404 when deleting non-existent client")
+        @DisplayName("should throw 404 and safely skip audit updates when deleting non-existent entry")
         void should_throw_404_when_deleting_non_existent_client() {
             UUID randomId = UUID.randomUUID();
             when(clientRepository.findByIdAndOwnerId(randomId, userId)).thenReturn(Optional.empty());
@@ -217,32 +252,33 @@ class ClientServiceTest {
                     .hasMessageContaining("not found");
 
             verify(clientRepository, never()).delete(any());
+            verifyNoInteractions(auditService);
         }
     }
 
     @Test
-    @DisplayName("should throw ObjectOptimisticLockingFailureException when versions mismatch")
+    @DisplayName("should throw ObjectOptimisticLockingFailureException and skip audit modification logs on concurrent conflicts")
     void should_throw_optimistic_lock_exception_on_version_mismatch() {
+        UUID clientId = UUID.randomUUID();
         Client existingClient = Client.builder()
-                .id(UUID.randomUUID())
+                .id(clientId)
                 .owner(testUser)
                 .name("Old Name")
                 .email("old@acme.com")
+                .createdAt(Instant.now())
                 .version(5L)
                 .build();
 
-        when(clientRepository.findByIdAndOwnerId(existingClient.getId(), userId)).thenReturn(Optional.of(existingClient));
+        when(clientRepository.findByIdAndOwnerId(clientId, userId)).thenReturn(Optional.of(existingClient));
 
         assertThatThrownBy(() -> clientService.update(
-                existingClient.getId(),
+                clientId,
                 new ClientService.ClientRequest(
-                        "New Name",
-                        "new@acme.com",
-                        null, null, null,
-                        4L
+                        "New Name", "new@acme.com", null, null, null, 4L
                 )
         )).isInstanceOf(ObjectOptimisticLockingFailureException.class);
 
         assertThat(existingClient.getName()).isEqualTo("Old Name");
+        verify(auditService, never()).log(any(), any(), any(), any(), any(), any());
     }
 }

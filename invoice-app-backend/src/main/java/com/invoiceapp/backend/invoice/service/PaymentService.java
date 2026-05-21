@@ -3,8 +3,11 @@ package com.invoiceapp.backend.invoice.service;
 import com.invoiceapp.backend.auth.domain.User;
 import com.invoiceapp.backend.auth.domain.UserRepository;
 import com.invoiceapp.backend.invoice.domain.*;
+import com.invoiceapp.backend.shared.audit.AuditAction;
+import com.invoiceapp.backend.shared.audit.AuditService;
 import com.invoiceapp.backend.shared.exception.InvoiceAppException;
 import com.invoiceapp.backend.shared.metrics.InvoiceMetrics;
+import com.invoiceapp.backend.shared.security.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -15,6 +18,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -25,9 +29,13 @@ public class PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final InvoiceRepository invoiceRepository;
-    private final UserRepository userRepository;
     private final InvoiceService invoiceService;
     private final InvoiceMetrics invoiceMetrics;
+    private final AuditService auditService;
+    private final CurrentUserResolver currentUserResolver;
+
+    private static final String PAYMENT = "PAYMENT";
+    private static final String UNSPECIFIED = "UNSPECIFIED";
 
     public record PaymentRequest(
             BigDecimal amount,
@@ -45,18 +53,9 @@ public class PaymentService {
             Instant createdAt
     ) {}
 
-    private User getCurrentUser() {
-        String email = Objects.requireNonNull(SecurityContextHolder.getContext().getAuthentication()).getName();
-        return userRepository.findByEmail(email)
-                .orElseThrow(() -> new InvoiceAppException(
-                        "Authenticated user not found",
-                        HttpStatus.INTERNAL_SERVER_ERROR
-                ));
-    }
-
     @Transactional
     public PaymentResponse recordPayment(UUID invoiceId, PaymentRequest request) {
-        User user = getCurrentUser();
+        User user = currentUserResolver.resolveUser();
 
         Invoice invoice = invoiceRepository
                 .findByIdAndCreatedById(invoiceId, user.getId())
@@ -104,6 +103,19 @@ public class PaymentService {
 
         Payment saved = paymentRepository.save(payment);
 
+        auditService.log(
+                PAYMENT,
+                saved.getId(),
+                AuditAction.PAYMENT_RECORDED,
+                null,
+                Map.of(
+                        "invoiceId", invoiceId.toString(),
+                        "amount", request.amount().toString(),
+                        "method", request.method() != null ? request.method() : UNSPECIFIED
+                ),
+                user.getId()
+        );
+
         BigDecimal newAmountPaid = alreadyPaid.add(request.amount())
                 .setScale(4, RoundingMode.HALF_UP);
 
@@ -121,7 +133,7 @@ public class PaymentService {
     }
 
     public List<PaymentResponse> findAllByInvoice(UUID invoiceId) {
-        User user = getCurrentUser();
+        User user = currentUserResolver.resolveUser();
 
         invoiceRepository.findByIdAndCreatedById(invoiceId, user.getId())
                 .orElseThrow(() -> new InvoiceAppException(

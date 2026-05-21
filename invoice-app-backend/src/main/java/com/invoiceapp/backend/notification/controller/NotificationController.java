@@ -3,6 +3,7 @@ package com.invoiceapp.backend.notification.controller;
 import com.invoiceapp.backend.auth.domain.User;
 import com.invoiceapp.backend.auth.domain.UserRepository;
 import com.invoiceapp.backend.notification.service.NotificationService;
+import com.invoiceapp.backend.shared.security.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -20,15 +21,12 @@ import java.util.UUID;
 public class NotificationController {
 
     private final NotificationService notificationService;
-    private final UserRepository userRepository;
+    private final CurrentUserResolver currentUserResolver;
 
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream() {
-        String email = Objects.requireNonNull(SecurityContextHolder.getContext().getAuthentication()).getName();
-        UUID userId = userRepository.findByEmail(email)
-                .map(User::getId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        User user = currentUserResolver.resolveUser();
 
-        return notificationService.createConnection(userId);
+        return notificationService.createConnection(user.getId());
     }
 }

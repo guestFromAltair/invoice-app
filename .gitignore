@@ -4,6 +4,7 @@
 *.iws
 *.ipr
 out/
+.attach_pid*
 
 # --- Maven ---
 target/

@@ -3,6 +3,8 @@ package com.invoiceapp.backend.auth.service;
 import com.invoiceapp.backend.auth.domain.Role;
 import com.invoiceapp.backend.auth.domain.User;
 import com.invoiceapp.backend.auth.domain.UserRepository;
+import com.invoiceapp.backend.shared.audit.AuditAction;
+import com.invoiceapp.backend.shared.audit.AuditService;
 import com.invoiceapp.backend.shared.exception.InvoiceAppException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -15,6 +17,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -34,20 +37,23 @@ class AuthServiceTest {
     private JwtService jwtService;
     @Mock
     private AuthenticationManager authenticationManager;
+    @Mock
+    private AuditService auditService;
 
     @InjectMocks
     private AuthService authService;
 
     @Test
-    @DisplayName("should register a new user and return a token")
+    @DisplayName("should register a new user, return a token, and trigger registration audit log")
     void should_register_new_user_and_return_token() {
+        UUID generatedUserId = UUID.randomUUID();
         when(jwtService.generateToken(any(User.class))).thenReturn("mocked.jwt.token");
         when(userRepository.findByEmail("new@example.com")).thenReturn(Optional.empty());
         when(passwordEncoder.encode("password123")).thenReturn("$2a$10$hashedpassword");
         when(userRepository.save(any(User.class)))
                 .thenAnswer(inv -> {
                     User saved = inv.getArgument(0);
-                    saved.setId(UUID.randomUUID());
+                    saved.setId(generatedUserId);
                     return saved;
                 });
 
@@ -63,10 +69,19 @@ class AuthServiceTest {
         verify(userRepository).save(argThat(user ->
                 "$2a$10$hashedpassword".equals(user.getPassword())
         ));
+
+        verify(auditService, times(1)).log(
+                eq("USER"),
+                eq(generatedUserId),
+                eq(AuditAction.USER_REGISTERED),
+                isNull(),
+                eq(Map.of("email", "new@example.com", "role", "USER")),
+                eq(generatedUserId)
+        );
     }
 
     @Test
-    @DisplayName("should throw 409 when registering with an existing email")
+    @DisplayName("should throw 409 when registering with an existing email and never audit")
     void should_throw_conflict_when_email_already_registered() {
         when(userRepository.findByEmail("existing@example.com"))
                 .thenReturn(Optional.of(User.builder()
@@ -77,11 +92,11 @@ class AuthServiceTest {
                 new AuthService.RegisterRequest(
                         "existing@example.com", "password123"
                 )
-        ))
-                .isInstanceOf(InvoiceAppException.class)
+        )).isInstanceOf(InvoiceAppException.class)
                 .hasMessageContaining("Email already registered");
 
         verify(userRepository, never()).save(any());
+        verifyNoInteractions(auditService);
     }
 
     @Test
@@ -97,12 +112,13 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("should login successfully and return a token")
+    @DisplayName("should login successfully, return a token, and trigger login audit log")
     void should_login_successfully_and_return_token() {
         when(jwtService.generateToken(any(User.class))).thenReturn("mocked.jwt.token");
 
+        UUID existingUserId = UUID.randomUUID();
         User existingUser = User.builder()
-                .id(UUID.randomUUID())
+                .id(existingUserId)
                 .email("user@example.com")
                 .password("$2a$10$hashed")
                 .role(Role.USER)
@@ -121,10 +137,19 @@ class AuthServiceTest {
 
         assertThat(response.token()).isEqualTo("mocked.jwt.token");
         assertThat(response.email()).isEqualTo("user@example.com");
+
+        verify(auditService, times(1)).log(
+                eq("USER"),
+                eq(existingUserId),
+                eq(AuditAction.USER_LOGIN),
+                isNull(),
+                eq(Map.of("email", "user@example.com")),
+                eq(existingUserId)
+        );
     }
 
     @Test
-    @DisplayName("should throw BadCredentialsException for wrong password")
+    @DisplayName("should throw BadCredentialsException for wrong password and never audit")
     void should_throw_for_wrong_password() {
         when(authenticationManager.authenticate(any())).thenThrow(new BadCredentialsException("Bad credentials"));
 
@@ -133,6 +158,7 @@ class AuthServiceTest {
         )).isInstanceOf(BadCredentialsException.class);
 
         verify(jwtService, never()).generateToken(any(User.class));
+        verifyNoInteractions(auditService);
     }
 
     @Test
