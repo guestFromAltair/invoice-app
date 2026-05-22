@@ -1,0 +1,22 @@
+# Git Configuration
+.git/
+.gitignore
+
+# Docker Configuration
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# IDE & Editor files
+.idea/
+*.iml
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Documentation & Miscellaneous
+*.md
+LICENSE
+.attach_pid*
