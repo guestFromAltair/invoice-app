@@ -41,6 +41,17 @@ export default function LoginPage() {
         }
     };
 
+    const handleDemoLogin = async () => {
+        try {
+            const result = await login({ email: 'demo@invoiceapp.com', password: 'password' }).unwrap();
+            dispatch(setCredentials(result));
+            navigate('/dashboard');
+            toast.success('Welcome to the demo sandbox!');
+        } catch {
+            toast.error('Could not log into demo account');
+        }
+    };
+
     return (
         <div className="min-h-screen flex items-center justify-center bg-background p-6">
             <Card className="w-full max-w-sm border-neutral-800/60 dark:border-neutral-800/60 shadow-lg">
@@ -83,9 +94,20 @@ export default function LoginPage() {
                             )}
                         </div>
 
-                        <Button type="submit" className="w-full h-11 text-base mt-2" disabled={isLoading}>
-                            {isLoading ? 'Signing in...' : 'Sign in'}
-                        </Button>
+                        <div className="flex flex-col gap-3 mt-2">
+                            <Button type="submit" className="w-full h-11 text-base" disabled={isLoading}>
+                                {isLoading ? 'Signing in...' : 'Sign in'}
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="w-full h-11 text-base border-dashed hover:bg-accent"
+                                onClick={handleDemoLogin}
+                                disabled={isLoading}
+                            >
+                                ⚡ Try Demo Account
+                            </Button>
+                        </div>
 
                         <p className="text-sm text-center text-muted-foreground">
                             No account?{' '}
