@@ -15,6 +15,9 @@ export function SseProvider() {
     useEffect(() => {
         if (!token) return;
 
+        const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
+        const streamUrl = `${baseUrl}/api/notifications/stream`;
+
         const connect = () => {
             if (abortControllerRef.current) {
                 abortControllerRef.current.abort();
@@ -23,7 +26,7 @@ export function SseProvider() {
             const controller = new AbortController();
             abortControllerRef.current = controller;
 
-            fetchEventSource('/api/notifications/stream', {
+            fetchEventSource(streamUrl, {
                 headers: {
                     Authorization: `Bearer ${token}`,
                     'Content-Type': 'application/json',

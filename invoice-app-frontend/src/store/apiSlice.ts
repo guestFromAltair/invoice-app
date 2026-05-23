@@ -15,7 +15,7 @@ import type {
 import {logout} from "@/store/authSlice.ts";
 
 const rawBaseQuery = fetchBaseQuery({
-    baseUrl: '/api',
+    baseUrl: import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api` : '/api',
     prepareHeaders: (headers, {getState}) => {
         const token = (getState() as RootState).auth.token;
         if (token) {
