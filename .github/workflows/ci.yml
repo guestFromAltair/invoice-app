@@ -1,0 +1,51 @@
+name: Continuous Integration
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  backend-tests:
+    name: Run Backend Tests
+    runs-rate: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Start Docker (For Testcontainers)
+        run: sudo systemctl start docker
+
+      - name: Run Test Suite
+        run: |
+          cd invoice-app-backend
+          chmod +x mvnw
+          ./mvnw test
+
+  frontend-tests:
+    name: Run Frontend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: invoice-app-frontend/package-lock.json
+
+      - name: Install & Test
+        run: |
+          cd invoice-app-frontend
+          npm ci
+          npm test -- --watchAll=false --passWithNoTests
