@@ -12,6 +12,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -25,8 +28,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Transactional
+@DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_CLASS)
 @DisplayName("InvoiceRepository")
 class InvoiceRepositoryTest extends PostgresTestContainer {
+
+    @TestConfiguration
+    @EnableJpaAuditing
+    static class TestAuditConfig {}
 
     @Autowired private InvoiceRepository invoiceRepository;
     @Autowired private UserRepository userRepository;
@@ -116,6 +124,11 @@ class InvoiceRepositoryTest extends PostgresTestContainer {
     @Test
     @DisplayName("should compute outstanding balance correctly")
     void should_compute_outstanding_balance() {
+        BigDecimal baselineBalance = invoiceRepository.computeOutstandingBalance();
+        if (baselineBalance == null) {
+            baselineBalance = BigDecimal.ZERO;
+        }
+
         Invoice invoice1 = saveInvoiceWithTotal(new BigDecimal("2000.0000"), InvoiceStatus.SENT);
         Invoice invoice2 = saveInvoiceWithTotal(new BigDecimal("1000.0000"), InvoiceStatus.SENT);
 
@@ -126,9 +139,10 @@ class InvoiceRepositoryTest extends PostgresTestContainer {
 
         saveInvoiceWithTotal(new BigDecimal("999.0000"), InvoiceStatus.PAID);
 
-        BigDecimal outstanding = invoiceRepository.computeOutstandingBalance();
+        BigDecimal currentBalance = invoiceRepository.computeOutstandingBalance();
 
-        assertThat(outstanding).isEqualByComparingTo(new BigDecimal("2500"));
+        BigDecimal expectedDifference = new BigDecimal("2500");
+        assertThat(currentBalance.subtract(baselineBalance)).isEqualByComparingTo(expectedDifference);
     }
 
     private Invoice saveInvoice(Client client, User user, InvoiceStatus status) {
