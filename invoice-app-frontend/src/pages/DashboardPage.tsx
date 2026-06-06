@@ -1,6 +1,6 @@
 import {useSelector} from 'react-redux';
 import {useNavigate} from 'react-router-dom';
-import {useGetInvoicesQuery} from '../store/apiSlice';
+import {useGetDashboardStatsQuery, useGetInvoicesQuery} from '../store/apiSlice';
 import {selectCurrentUser} from '../store/authSlice';
 import {Card, CardContent, CardHeader, CardTitle} from '../components/ui/card';
 import {Badge} from '../components/ui/badge';
@@ -32,18 +32,15 @@ export default function DashboardPage() {
     const {data: overdueInvoices} = useGetInvoicesQuery({status: 'OVERDUE', size: 1});
     const {data: paidInvoices} = useGetInvoicesQuery({status: 'PAID', size: 1});
 
-    const outstandingBalance = allInvoices?.content
-        .filter(i => i.status === 'SENT' || i.status === 'OVERDUE')
-        .reduce((sum, i) => sum + i.remainingBalance, 0) ?? 0;
+    const {data: stats} = useGetDashboardStatsQuery();
+    const outstandingBalance = stats?.outstandingBalance ?? 0;
 
     const summaryCards = [
         {
             title: 'Total invoiced',
-            value: formatCurrency(
-                allInvoices?.content.reduce((sum, i) => sum + i.total, 0) ?? 0
-            ),
+            value: formatCurrency(stats?.totalInvoiced ?? 0),
             icon: TrendingUp,
-            description: `${allInvoices?.totalElements ?? 0} invoices total`,
+            description: `${(sentInvoices?.totalElements ?? 0) + (overdueInvoices?.totalElements ?? 0) + (paidInvoices?.totalElements ?? 0)} active invoices`,
             colour: 'text-blue-600'
         },
         {

@@ -50,8 +50,7 @@ public class InvoiceService {
             BigDecimal unitPrice,
             BigDecimal discountPct,
             Integer position
-    ) {
-    }
+    ) {}
 
     public record InvoiceRequest(
             UUID clientId,
@@ -60,8 +59,7 @@ public class InvoiceService {
             BigDecimal taxRate,
             String notes,
             List<LineItemRequest> lineItems
-    ) {
-    }
+    ) {}
 
     public record LineItemResponse(
             UUID id,
@@ -71,8 +69,7 @@ public class InvoiceService {
             BigDecimal discountPct,
             BigDecimal lineTotal,
             Integer position
-    ) {
-    }
+    ) {}
 
     public record InvoiceResponse(
             UUID id,
@@ -92,8 +89,12 @@ public class InvoiceService {
             List<LineItemResponse> lineItems,
             Instant createdAt,
             Long version
-    ) {
-    }
+    ) {}
+
+    public record DashboardStatsResponse(
+            BigDecimal totalInvoiced,
+            BigDecimal outstandingBalance
+    ) {}
 
     private String generateInvoiceNumber() {
         Long seq = invoiceRepository.nextInvoiceSequence();
@@ -331,6 +332,14 @@ public class InvoiceService {
         return toResponse(invoice);
     }
 
+    public DashboardStatsResponse getDashboardStats() {
+        User user = currentUserResolver.resolveUser();
+        BigDecimal totalInvoiced = invoiceRepository.computeTotalInvoiced(user.getId());
+        BigDecimal outstanding = invoiceRepository.computeOutstandingBalance(user.getId());
+
+        return new DashboardStatsResponse(totalInvoiced, outstanding);
+    }
+
     private InvoiceResponse toResponse(Invoice invoice) {
         BigDecimal amountPaid = invoice.getPayments() == null
                 ? BigDecimal.ZERO
@@ -338,7 +347,9 @@ public class InvoiceService {
                   .map(Payment::getAmount)
                   .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal remaining = invoice.getTotal().subtract(amountPaid);
+        BigDecimal remaining = InvoiceStatus.CANCELLED.equals(invoice.getStatus())
+                ? BigDecimal.ZERO
+                : invoice.getTotal().subtract(amountPaid);
 
         List<LineItemResponse> lineItemResponses = invoice.getLineItems().stream()
                 .map(li -> new LineItemResponse(
