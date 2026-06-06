@@ -107,6 +107,11 @@ public class InvoiceController {
         return invoiceService.markPaid(id, version);
     }
 
+    @GetMapping("/dashboard-stats")
+    public ResponseEntity<InvoiceService.DashboardStatsResponse> getDashboardStats() {
+        return ResponseEntity.ok(invoiceService.getDashboardStats());
+    }
+
     public record LineItemRequest(
             @NotBlank(message = "Description is required")
             String description,

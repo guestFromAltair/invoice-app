@@ -82,4 +82,30 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
             @QueryHint(name = "jakarta.persistence.query.timeout", value = "60000")
     })
     Stream<Invoice> streamStaleDraftsForReconciliation(@Param("cutoffDate") LocalDate cutoffDate);
+
+    @Query(value = """
+            SELECT COALESCE(SUM(total), 0)
+            FROM invoices
+            WHERE created_by = :userId
+            AND status NOT IN ('DRAFT', 'CANCELLED')
+            """, nativeQuery = true)
+    BigDecimal computeTotalInvoiced(@Param("userId") UUID userId);
+
+    @Query(value = """
+        SELECT
+            (SELECT COALESCE(SUM(total), 0)
+                FROM invoices
+                WHERE created_by = :userId
+                AND status IN ('SENT', 'OVERDUE')
+            )
+            -
+            (SELECT COALESCE(SUM(p.amount), 0)
+                FROM payments p
+                JOIN invoices i
+                ON p.invoice_id = i.id
+                WHERE i.created_by = :userId
+                AND i.status IN ('SENT', 'OVERDUE')
+            )
+        """, nativeQuery = true)
+    BigDecimal computeOutstandingBalance(@Param("userId") UUID userId);
 }

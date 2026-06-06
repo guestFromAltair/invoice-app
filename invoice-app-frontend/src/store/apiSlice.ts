@@ -10,7 +10,7 @@ import type {
     AuthResponse, LoginRequest, RegisterRequest,
     Client, ClientRequest, Page,
     Invoice, InvoiceStatus,
-    Payment, PaymentRequest, UpdateInvoiceRequest, CreateInvoiceRequest
+    Payment, PaymentRequest, UpdateInvoiceRequest, CreateInvoiceRequest, DashboardStats
 } from '@/types';
 import {logout} from "@/store/authSlice.ts";
 
@@ -228,6 +228,11 @@ export const apiSlice = createApi({
                 responseHandler: async (response) => response.blob(),
                 cache: 'no-cache'
             })
+        }),
+
+        getDashboardStats: builder.query<DashboardStats, void>({
+            query: () => '/invoices/dashboard-stats',
+            providesTags: ['Invoice', 'Payment']
         })
     })
 });
@@ -249,5 +254,6 @@ export const {
     useMarkInvoicePaidMutation,
     useGetPaymentsQuery,
     useRecordPaymentMutation,
-    useLazyDownloadInvoicePdfQuery
+    useLazyDownloadInvoicePdfQuery,
+    useGetDashboardStatsQuery
 } = apiSlice;

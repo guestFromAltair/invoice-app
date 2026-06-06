@@ -199,11 +199,11 @@ export default function InvoicesPage() {
                                                     {formatCurrency(invoice.total)}
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    {invoice.remainingBalance > 0
-                                                        ? <span className="text-destructive font-semibold">
+                                                    {invoice.status === 'CANCELLED' || invoice.remainingBalance <= 0
+                                                        ? <span className="text-muted-foreground">—</span>
+                                                        : <span className="text-destructive font-semibold">
                                                             {formatCurrency(invoice.remainingBalance)}
                                                           </span>
-                                                        : <span className="text-muted-foreground">—</span>
                                                     }
                                                 </TableCell>
                                             </TableRow>

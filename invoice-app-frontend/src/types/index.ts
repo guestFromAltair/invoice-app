@@ -132,3 +132,8 @@ export interface InvoiceNotification {
     newStatus: InvoiceStatus;
     message: string;
 }
+
+export interface DashboardStats {
+    totalInvoiced: number;
+    outstandingBalance: number;
+}
