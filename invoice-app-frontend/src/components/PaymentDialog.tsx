@@ -35,7 +35,7 @@ export function PaymentDialog({remainingBalance, onSubmit}: PaymentDialogProps) 
     const {register, handleSubmit, reset, formState: {errors}} =
         useForm<PaymentFormData>({
             resolver: zodResolver(paymentSchema),
-            defaultValues: {amount: remainingBalance}
+            values: {amount: remainingBalance}
         });
 
     const handleFormSubmit = useCallback(async (data: PaymentFormData) => {
