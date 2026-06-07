@@ -159,7 +159,7 @@ VALUES
         '00000000-0000-0000-0000-000000000001',
         'SENT',
         now()::date - 5,
-        now()::date + 25,
+        now()::date + 30,
         9500.0000, 0.2000, 1900.0000, 0.0000, 11400.0000,
         'Q3 product development milestone — Luminary Group',
         now() - INTERVAL '20 days',
