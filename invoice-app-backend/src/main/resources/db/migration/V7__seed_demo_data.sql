@@ -90,7 +90,7 @@ VALUES
         'PAID',
         now()::date - 150,
         now()::date - 120,
-        8500.0000, 0.2000, 1700.0000, 0.0000, 10200.0000,
+        8416.6667, 0.2000, 1683.3333, 0.0000, 10100.0000,
         'Q1 software development retainer — Meridian Technologies',
         now() - INTERVAL '150 days',
         now() - INTERVAL '120 days',
