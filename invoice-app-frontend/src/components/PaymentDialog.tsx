@@ -104,6 +104,7 @@ export function PaymentDialog({remainingBalance, onSubmit}: PaymentDialogProps) 
                         <Button
                             type="button"
                             variant="outline"
+                            className="dark:text-white"
                             onClick={() => setOpen(false)}
                         >
                             Cancel
