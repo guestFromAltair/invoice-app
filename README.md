@@ -5,6 +5,7 @@ Designed to demonstrate financial-domain Java patterns relevant to fintech and b
 
 **[Live Demo](https://invoice-app-nine-alpha.vercel.app/)** ·
 **[API Docs](https://invoice-app-production-d447.up.railway.app/swagger-ui.html)**
+**[75-Sec Architecture Walkthrough](https://youtu.be/D8GPr_1ce-g)**
 
 > Demo credentials: `demo@invoiceapp.com` / `password`
 
