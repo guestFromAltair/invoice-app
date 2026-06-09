@@ -218,7 +218,8 @@ export const apiSlice = createApi({
             invalidatesTags: (_result, _error, {invoiceId}) => [
                 {type: 'Payment', id: invoiceId},
                 {type: 'Invoice', id: invoiceId},
-                {type: 'Invoice', id: 'LIST'}
+                {type: 'Invoice', id: 'LIST'},
+                {type: 'Payment', id: 'LIST'}
             ]
         }),
 
@@ -232,7 +233,7 @@ export const apiSlice = createApi({
 
         getDashboardStats: builder.query<DashboardStats, void>({
             query: () => '/invoices/dashboard-stats',
-            providesTags: ['Invoice', 'Payment']
+            providesTags: [{ type: 'Invoice', id: 'LIST' }, { type: 'Payment', id: 'LIST' }]
         })
     })
 });
