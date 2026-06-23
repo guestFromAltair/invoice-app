@@ -1,0 +1,133 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+enum Role {
+  USER
+  ADMIN
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+model User {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email     String   @unique @db.VarChar(255)
+  password  String   @db.VarChar(255)
+  role      Role     @default(USER)
+  version   Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  clients  Client[]
+  invoices Invoice[]
+
+  @@map("users")
+}
+
+model Client {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerId   String   @map("owner_id") @db.Uuid
+  name      String   @db.VarChar(255)
+  email     String?  @db.VarChar(255)
+  phone     String?  @db.VarChar(50)
+  address   String?  @db.Text
+  vatNumber String?  @map("vat_number") @db.VarChar(100)
+  version   Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  owner    User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  invoices Invoice[]
+
+  @@index([ownerId])
+  @@map("clients")
+}
+
+model Invoice {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceNumber  String        @unique @map("invoice_number") @db.VarChar(50)
+  clientId       String        @map("client_id") @db.Uuid
+  createdById    String        @map("created_by") @db.Uuid
+  status         InvoiceStatus @default(DRAFT)
+  issueDate      DateTime      @map("issue_date") @db.Date
+  dueDate        DateTime      @map("due_date") @db.Date
+  subtotal       Decimal       @default(0) @db.Decimal(19, 4)
+  taxRate        Decimal       @default(0) @map("tax_rate") @db.Decimal(5, 4)
+  taxAmount      Decimal       @default(0) @map("tax_amount") @db.Decimal(19, 4)
+  discountAmount Decimal       @default(0) @map("discount_amount") @db.Decimal(19, 4)
+  total          Decimal       @default(0) @db.Decimal(19, 4)
+  notes          String?       @db.Text
+  version        Int           @default(0)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  client    Client     @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  createdBy User       @relation(fields: [createdById], references: [id])
+  lineItems LineItem[]
+  payments  Payment[]
+
+  @@index([clientId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([createdById])
+  @@map("invoices")
+}
+
+model LineItem {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceId   String   @map("invoice_id") @db.Uuid
+  description String   @db.VarChar(500)
+  quantity    Decimal  @db.Decimal(10, 2)
+  unitPrice   Decimal  @map("unit_price") @db.Decimal(19, 4)
+  discountPct Decimal  @default(0) @map("discount_pct") @db.Decimal(5, 4)
+  lineTotal   Decimal  @map("line_total") @db.Decimal(19, 4)
+  position    Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("line_items")
+}
+
+model Payment {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceId String   @map("invoice_id") @db.Uuid
+  amount    Decimal  @db.Decimal(19, 4)
+  paidAt    DateTime @default(now()) @map("paid_at") @db.Timestamptz
+  method    String?  @db.VarChar(50)
+  notes     String?  @db.Text
+  version   Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@index([invoiceId])
+  @@map("payments")
+}
+
+model AuditLog {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  entityType  String   @map("entity_type") @db.VarChar(100)
+  entityId    String   @map("entity_id") @db.Uuid
+  action      String   @db.VarChar(100)
+  oldValue    String?  @map("old_value") @db.Text
+  newValue    String?  @map("new_value") @db.Text
+  performedBy String?  @map("performed_by") @db.Uuid
+  performedAt DateTime @default(now()) @map("performed_at") @db.Timestamptz
+  ipAddress   String?  @map("ip_address") @db.VarChar(45)
+  requestId   String?  @map("request_id") @db.VarChar(100)
+
+  @@index([entityType, entityId])
+  @@index([performedAt])
+  @@map("audit_logs")
+}
