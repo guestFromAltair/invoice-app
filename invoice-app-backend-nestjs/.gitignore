@@ -1,0 +1,27 @@
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# Testing
+/coverage
+
+# NestJS build output
+/dist
+
+# Local Environment Variables (CRITICAL: Never commit these!)
+.env
+.env.local
+.env.*.local
+
+# Prisma temporary files
+/prisma/migrations-backups
+
+# IDEs and Editors
+/.idea
+/.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
