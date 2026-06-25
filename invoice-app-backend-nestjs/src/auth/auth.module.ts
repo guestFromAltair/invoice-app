@@ -1,16 +1,21 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigType } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
+import { APP_GUARD } from '@nestjs/core';
 import { UsersModule } from '../users/users.module';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { HashingService } from './hashing/hashing.service';
 import { BcryptHashingService } from './hashing/bcrypt-hashing.service';
+import { JwtStrategy } from './strategies/jwt.strategy';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import jwtConfig from '../config/jwt.config';
 
 @Module({
   imports: [
     UsersModule,
+    PassportModule,
     ConfigModule.forFeature(jwtConfig),
     JwtModule.registerAsync({
       imports: [ConfigModule.forFeature(jwtConfig)],
@@ -24,9 +29,14 @@ import jwtConfig from '../config/jwt.config';
   controllers: [AuthController],
   providers: [
     AuthService,
+    JwtStrategy,
     {
       provide: HashingService,
       useClass: BcryptHashingService,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
     },
   ],
   exports: [AuthService],
