@@ -10,6 +10,7 @@ import { HashingService } from './hashing/hashing.service';
 import { BcryptHashingService } from './hashing/bcrypt-hashing.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import jwtConfig from '../config/jwt.config';
 
 @Module({
@@ -37,6 +38,10 @@ import jwtConfig from '../config/jwt.config';
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
     },
   ],
   exports: [AuthService],
