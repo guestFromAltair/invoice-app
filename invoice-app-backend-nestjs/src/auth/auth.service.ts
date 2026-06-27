@@ -1,9 +1,4 @@
-import {
-  ConflictException,
-  Inject,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { ConflictException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import * as config from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Prisma, User } from '@prisma/client';
@@ -21,12 +16,11 @@ export class AuthService {
     private readonly hashingService: HashingService,
     private readonly jwtService: JwtService,
     @Inject(jwtConfig.KEY)
-    private readonly jwtConfiguration: config.ConfigType<typeof jwtConfig>,
+    private readonly jwtConfiguration: config.ConfigType<typeof jwtConfig>
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthTokenResponse> {
     const hashedPassword = await this.hashingService.hash(dto.password);
-
     try {
       const user = await this.usersService.create({
         email: dto.email,
@@ -34,13 +28,8 @@ export class AuthService {
       });
       return this.signToken(user);
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        throw new ConflictException(
-          'An account with this email already exists',
-        );
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('An account with this email already exists');
       }
       throw error;
     }
@@ -57,10 +46,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const passwordMatches = await this.hashingService.compare(
-      password,
-      user.password,
-    );
+    const passwordMatches = await this.hashingService.compare(password, user.password);
     if (!passwordMatches) {
       throw new UnauthorizedException('Invalid credentials');
     }
