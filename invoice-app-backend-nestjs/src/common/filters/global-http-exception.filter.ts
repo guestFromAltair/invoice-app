@@ -1,11 +1,4 @@
-import {
-  ArgumentsHost,
-  Catch,
-  ExceptionFilter,
-  HttpException,
-  HttpStatus,
-  Logger,
-} from '@nestjs/common';
+import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import { Prisma } from '@prisma/client';
 import { Request } from 'express';
@@ -48,7 +41,7 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
     if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
       this.logger.error(
         `${request.method} ${body.path} -> ${status}`,
-        exception instanceof Error ? exception.stack : String(exception),
+        exception instanceof Error ? exception.stack : String(exception)
       );
     } else {
       this.logger.warn(`${request.method} ${body.path} -> ${status}`);
@@ -85,19 +78,13 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
     };
   }
 
-  private mapPrismaError(
-    exception: Prisma.PrismaClientKnownRequestError,
-  ): MappedException {
+  private mapPrismaError(exception: Prisma.PrismaClientKnownRequestError): MappedException {
     switch (exception.code) {
       case 'P2002': {
-        const target = (exception.meta?.target as string[] | undefined)?.join(
-          ', ',
-        );
+        const target = (exception.meta?.target as string[] | undefined)?.join(', ');
         return {
           status: HttpStatus.CONFLICT,
-          message: target
-            ? `A record with this ${target} already exists`
-            : 'Unique constraint violation',
+          message: target ? `A record with this ${target} already exists` : 'Unique constraint violation',
           error: 'Conflict',
         };
       }
