@@ -1,10 +1,5 @@
-import {
-  Injectable,
-  OnModuleInit,
-  OnModuleDestroy,
-  Logger,
-} from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
@@ -16,13 +11,20 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     connectionString: process.env.DATABASE_URL,
   });
 
-  public readonly client = new PrismaClient({
-    adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
-    log: [
+  private static getLogOptions(): Prisma.LogDefinition[] {
+    if (process.env.NODE_ENV === 'test') {
+      return [];
+    }
+    return [
       { emit: 'event', level: 'query' },
       { emit: 'stdout', level: 'error' },
       { emit: 'stdout', level: 'warn' },
-    ],
+    ];
+  }
+
+  public readonly client = new PrismaClient({
+    adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+    log: PrismaService.getLogOptions(),
   });
 
   async onModuleInit(): Promise<void> {

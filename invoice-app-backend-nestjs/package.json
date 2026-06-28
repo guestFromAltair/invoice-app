@@ -51,6 +51,7 @@
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
     "@prisma/client": "^7.8.0",
+    "@testcontainers/postgresql": "^12.0.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/express": "^5.0.0",
     "@types/ioredis": "^4.28.10",
