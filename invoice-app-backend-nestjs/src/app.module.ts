@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { validateEnv } from './common/env.validation';
 import { GlobalHttpExceptionFilter } from './common/filters/global-http-exception.filter';
 import jwtConfig from './config/jwt.config';
+import { ClientModule } from './client/client.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import jwtConfig from './config/jwt.config';
     PrismaModule,
     UsersModule,
     AuthModule,
+    ClientModule,
   ],
   providers: [
     {
