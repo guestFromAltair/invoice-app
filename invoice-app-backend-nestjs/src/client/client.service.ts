@@ -5,6 +5,7 @@ import { CreateClientDto } from './dto/create-client.dto';
 import { QueryClientsDto } from './dto/query-clients.dto';
 import { ClientResponse } from './types/client-response.type';
 import { PaginatedResult } from '../common/types/paginated-result.type';
+import { UpdateClientDto } from './dto/update-client.dto';
 
 @Injectable()
 export class ClientService {
@@ -45,6 +46,23 @@ export class ClientService {
 
   async findOne(ownerId: string, id: string): Promise<ClientResponse> {
     return this.ensureOwnedClient(ownerId, id);
+  }
+
+  async update(ownerId: string, id: string, dto: UpdateClientDto): Promise<ClientResponse> {
+    await this.ensureOwnedClient(ownerId, id);
+
+    return this.prisma.client.update({
+      where: { id },
+      data: dto,
+    });
+  }
+
+  async remove(ownerId: string, id: string): Promise<void> {
+    await this.ensureOwnedClient(ownerId, id);
+
+    await this.prisma.client.delete({
+      where: { id },
+    });
   }
 
   private async ensureOwnedClient(ownerId: string, id: string): Promise<Client> {
