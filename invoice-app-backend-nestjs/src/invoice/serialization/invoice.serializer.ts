@@ -1,4 +1,3 @@
-import Decimal from 'decimal.js';
 import { InvoiceStatus } from '@prisma/client';
 import { InvoiceResponse, LineItemResponse } from '../types/invoice-response.type';
 
@@ -6,13 +5,17 @@ const MONEY_DP = 4;
 const QUANTITY_DP = 2;
 const RATE_DP = 4;
 
+export interface DecimalLike {
+  toFixed(decimalPlaces?: number): string;
+}
+
 export interface LineItemEntity {
   id: string;
   description: string;
-  quantity: Decimal;
-  unitPrice: Decimal;
-  discountPct: Decimal;
-  lineTotal: Decimal;
+  quantity: DecimalLike;
+  unitPrice: DecimalLike;
+  discountPct: DecimalLike;
+  lineTotal: DecimalLike;
   position: number;
 }
 
@@ -24,11 +27,11 @@ export interface InvoiceEntity {
   status: InvoiceStatus;
   issueDate: Date;
   dueDate: Date;
-  subtotal: Decimal;
-  taxRate: Decimal;
-  taxAmount: Decimal;
-  discountAmount: Decimal;
-  total: Decimal;
+  subtotal: DecimalLike;
+  taxRate: DecimalLike;
+  taxAmount: DecimalLike;
+  discountAmount: DecimalLike;
+  total: DecimalLike;
   notes: string | null;
   version: number;
   createdAt: Date;

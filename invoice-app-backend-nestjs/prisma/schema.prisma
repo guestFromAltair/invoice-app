@@ -133,3 +133,10 @@ model AuditLog {
   @@index([performedAt])
   @@map("audit_logs")
 }
+
+model InvoiceCounter {
+  year      Int @id
+  lastValue Int @default(0) @map("last_value")
+
+  @@map("invoice_counters")
+}
