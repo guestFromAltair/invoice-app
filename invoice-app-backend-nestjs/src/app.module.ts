@@ -9,6 +9,8 @@ import { InvoiceModule } from './invoice/invoice.module';
 import { validateEnv } from './common/env.validation';
 import { GlobalHttpExceptionFilter } from './common/filters/global-http-exception.filter';
 import jwtConfig from './config/jwt.config';
+import redisConfig from './config/redis.config';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -16,9 +18,10 @@ import jwtConfig from './config/jwt.config';
       isGlobal: true,
       validate: validateEnv,
       envFilePath: '.env',
-      load: [jwtConfig],
+      load: [jwtConfig, redisConfig],
     }),
     PrismaModule,
+    RedisModule,
     UsersModule,
     AuthModule,
     ClientModule,
