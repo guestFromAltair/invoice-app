@@ -11,6 +11,7 @@ import { GlobalHttpExceptionFilter } from './common/filters/global-http-exceptio
 import jwtConfig from './config/jwt.config';
 import redisConfig from './config/redis.config';
 import { RedisModule } from './redis/redis.module';
+import { IdempotencyModule } from './idempotency/idempotency.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { RedisModule } from './redis/redis.module';
     AuthModule,
     ClientModule,
     InvoiceModule,
+    IdempotencyModule,
   ],
   providers: [
     {
