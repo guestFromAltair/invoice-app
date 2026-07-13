@@ -4,9 +4,11 @@ import com.invoiceapp.backend.auth.domain.User;
 import com.invoiceapp.backend.client.domain.Client;
 import com.invoiceapp.backend.client.domain.ClientRepository;
 import com.invoiceapp.backend.invoice.domain.*;
+import com.invoiceapp.backend.invoice.event.InvoiceCreatedEvent;
 import com.invoiceapp.backend.notification.service.NotificationService;
 import com.invoiceapp.backend.shared.audit.AuditAction;
 import com.invoiceapp.backend.shared.audit.AuditService;
+import com.invoiceapp.backend.shared.audit.outbox.OutboxService;
 import com.invoiceapp.backend.shared.exception.InvoiceAppException;
 import com.invoiceapp.backend.shared.metrics.InvoiceMetrics;
 import com.invoiceapp.backend.shared.security.CurrentUserResolver;
@@ -39,6 +41,7 @@ public class InvoiceService {
     private final InvoiceMetrics invoiceMetrics;
     private final AuditService auditService;
     private final CurrentUserResolver currentUserResolver;
+    private final OutboxService outboxService;
 
     private static final String INVOICE = "INVOICE";
     private static final String INVOICE_STATUS_CHANGED = "INVOICE_STATUS_CHANGED";
@@ -50,7 +53,8 @@ public class InvoiceService {
             BigDecimal unitPrice,
             BigDecimal discountPct,
             Integer position
-    ) {}
+    ) {
+    }
 
     public record InvoiceRequest(
             UUID clientId,
@@ -59,7 +63,8 @@ public class InvoiceService {
             BigDecimal taxRate,
             String notes,
             List<LineItemRequest> lineItems
-    ) {}
+    ) {
+    }
 
     public record LineItemResponse(
             UUID id,
@@ -69,7 +74,8 @@ public class InvoiceService {
             BigDecimal discountPct,
             BigDecimal lineTotal,
             Integer position
-    ) {}
+    ) {
+    }
 
     public record InvoiceResponse(
             UUID id,
@@ -89,12 +95,14 @@ public class InvoiceService {
             List<LineItemResponse> lineItems,
             Instant createdAt,
             Long version
-    ) {}
+    ) {
+    }
 
     public record DashboardStatsResponse(
             BigDecimal totalInvoiced,
             BigDecimal outstandingBalance
-    ) {}
+    ) {
+    }
 
     private String generateInvoiceNumber() {
         Long seq = invoiceRepository.nextInvoiceSequence();
@@ -159,6 +167,22 @@ public class InvoiceService {
         );
 
         invoiceMetrics.recordInvoiceCreated();
+
+        outboxService.publish(
+                INVOICE,
+                saved.getId(),
+                "InvoiceCreated",
+                new InvoiceCreatedEvent(
+                        saved.getId(),
+                        saved.getInvoiceNumber(),
+                        saved.getClient().getId(),
+                        user.getId(),
+                        saved.getStatus().name(),
+                        saved.getTotal(),
+                        Instant.now()
+                )
+        );
+
         return toResponse(saved);
     }
 

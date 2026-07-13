@@ -7,6 +7,7 @@ import com.invoiceapp.backend.invoice.domain.*;
 import com.invoiceapp.backend.notification.service.NotificationService;
 import com.invoiceapp.backend.shared.audit.AuditAction;
 import com.invoiceapp.backend.shared.audit.AuditService;
+import com.invoiceapp.backend.shared.audit.outbox.OutboxService;
 import com.invoiceapp.backend.shared.exception.InvoiceAppException;
 import com.invoiceapp.backend.shared.metrics.InvoiceMetrics;
 import com.invoiceapp.backend.shared.security.CurrentUserResolver;
@@ -54,6 +55,8 @@ class InvoiceServiceTest {
     private NotificationService notificationService;
     @Mock
     private AuditService auditService;
+    @Mock
+    private OutboxService outboxService;
 
     @InjectMocks
     private InvoiceService invoiceService;
