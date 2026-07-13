@@ -4,6 +4,7 @@ import com.invoiceapp.backend.auth.domain.User;
 import com.invoiceapp.backend.invoice.domain.*;
 import com.invoiceapp.backend.shared.audit.AuditAction;
 import com.invoiceapp.backend.shared.audit.AuditService;
+import com.invoiceapp.backend.shared.audit.outbox.OutboxService;
 import com.invoiceapp.backend.shared.exception.InvoiceAppException;
 import com.invoiceapp.backend.shared.metrics.InvoiceMetrics;
 import com.invoiceapp.backend.shared.security.CurrentUserResolver;
@@ -35,6 +36,7 @@ class PaymentServiceTest {
     @Mock private InvoiceMetrics invoiceMetrics;
     @Mock private InvoiceService invoiceService;
     @Mock private AuditService auditService;
+    @Mock private OutboxService outboxService;
 
     @InjectMocks
     private PaymentService paymentService;
