@@ -3,8 +3,10 @@ package com.invoiceapp.backend.invoice.service;
 import com.invoiceapp.backend.auth.domain.User;
 import com.invoiceapp.backend.auth.domain.UserRepository;
 import com.invoiceapp.backend.invoice.domain.*;
+import com.invoiceapp.backend.invoice.event.PaymentRecordedEvent;
 import com.invoiceapp.backend.shared.audit.AuditAction;
 import com.invoiceapp.backend.shared.audit.AuditService;
+import com.invoiceapp.backend.shared.audit.outbox.OutboxService;
 import com.invoiceapp.backend.shared.exception.InvoiceAppException;
 import com.invoiceapp.backend.shared.metrics.InvoiceMetrics;
 import com.invoiceapp.backend.shared.security.CurrentUserResolver;
@@ -33,16 +35,19 @@ public class PaymentService {
     private final InvoiceMetrics invoiceMetrics;
     private final AuditService auditService;
     private final CurrentUserResolver currentUserResolver;
+    private final OutboxService outboxService;
 
     private static final String PAYMENT = "PAYMENT";
     private static final String UNSPECIFIED = "UNSPECIFIED";
+    private static final String INVOICE = "INVOICE";
 
     public record PaymentRequest(
             BigDecimal amount,
             Instant paidAt,
             String method,
             String notes
-    ) {}
+    ) {
+    }
 
     public record PaymentResponse(
             UUID id,
@@ -51,7 +56,8 @@ public class PaymentService {
             String method,
             String notes,
             Instant createdAt
-    ) {}
+    ) {
+    }
 
     @Transactional
     public PaymentResponse recordPayment(UUID invoiceId, PaymentRequest request) {
@@ -128,6 +134,21 @@ public class PaymentService {
 
         double newBalance = invoiceService.computeTotalOutstandingBalance();
         invoiceMetrics.updateOutstandingBalance(newBalance);
+
+        outboxService.publish(
+                INVOICE,
+                invoice.getId(),
+                "PaymentRecorded",
+                new PaymentRecordedEvent(
+                        saved.getId(),
+                        invoice.getId(),
+                        saved.getAmount(),
+                        saved.getMethod(),
+                        saved.getPaidAt(),
+                        invoice.getStatus().name(),
+                        Instant.now()
+                )
+        );
 
         return toResponse(saved);
     }

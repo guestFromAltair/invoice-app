@@ -5,6 +5,7 @@ import com.invoiceapp.backend.client.domain.Client;
 import com.invoiceapp.backend.client.domain.ClientRepository;
 import com.invoiceapp.backend.invoice.domain.*;
 import com.invoiceapp.backend.invoice.event.InvoiceCreatedEvent;
+import com.invoiceapp.backend.invoice.event.InvoiceStatusChangedEvent;
 import com.invoiceapp.backend.notification.service.NotificationService;
 import com.invoiceapp.backend.shared.audit.AuditAction;
 import com.invoiceapp.backend.shared.audit.AuditService;
@@ -352,6 +353,20 @@ public class InvoiceService {
             double newBalance = computeTotalOutstandingBalance();
             invoiceMetrics.updateOutstandingBalance(newBalance);
         }
+
+        outboxService.publish(
+                INVOICE,
+                invoice.getId(),
+                "InvoiceStatusChanged",
+                new InvoiceStatusChangedEvent(
+                        invoice.getId(),
+                        invoice.getInvoiceNumber(),
+                        oldStatus.name(),
+                        target.name(),
+                        user.getId(),
+                        Instant.now()
+                )
+        );
 
         return toResponse(invoice);
     }
