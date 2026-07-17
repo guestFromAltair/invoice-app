@@ -1,18 +1,16 @@
 package com.invoiceapp.backend.invoice.service;
 
 import com.invoiceapp.backend.auth.domain.User;
-import com.invoiceapp.backend.auth.domain.UserRepository;
 import com.invoiceapp.backend.invoice.domain.*;
 import com.invoiceapp.backend.invoice.event.PaymentRecordedEvent;
 import com.invoiceapp.backend.shared.audit.AuditAction;
 import com.invoiceapp.backend.shared.audit.AuditService;
-import com.invoiceapp.backend.shared.audit.outbox.OutboxService;
+import com.invoiceapp.backend.shared.outbox.OutboxService;
 import com.invoiceapp.backend.shared.exception.InvoiceAppException;
 import com.invoiceapp.backend.shared.metrics.InvoiceMetrics;
 import com.invoiceapp.backend.shared.security.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,7 +19,6 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
 
 @Service

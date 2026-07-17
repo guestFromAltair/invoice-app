@@ -1,4 +1,4 @@
-package com.invoiceapp.backend.shared.audit.outbox;
+package com.invoiceapp.backend.shared.outbox;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;

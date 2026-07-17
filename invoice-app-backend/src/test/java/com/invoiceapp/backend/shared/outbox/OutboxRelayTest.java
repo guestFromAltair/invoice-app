@@ -1,8 +1,5 @@
 package com.invoiceapp.backend.shared.outbox;
 
-import com.invoiceapp.backend.shared.audit.outbox.OutboxEvent;
-import com.invoiceapp.backend.shared.audit.outbox.OutboxEventRepository;
-import com.invoiceapp.backend.shared.audit.outbox.OutboxRelay;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

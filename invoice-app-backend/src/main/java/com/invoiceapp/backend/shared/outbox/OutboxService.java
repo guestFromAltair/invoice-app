@@ -1,4 +1,4 @@
-package com.invoiceapp.backend.shared.audit.outbox;
+package com.invoiceapp.backend.shared.outbox;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
