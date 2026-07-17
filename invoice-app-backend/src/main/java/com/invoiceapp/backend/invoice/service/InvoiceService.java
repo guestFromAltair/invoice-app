@@ -6,10 +6,9 @@ import com.invoiceapp.backend.client.domain.ClientRepository;
 import com.invoiceapp.backend.invoice.domain.*;
 import com.invoiceapp.backend.invoice.event.InvoiceCreatedEvent;
 import com.invoiceapp.backend.invoice.event.InvoiceStatusChangedEvent;
-import com.invoiceapp.backend.notification.service.NotificationService;
 import com.invoiceapp.backend.shared.audit.AuditAction;
 import com.invoiceapp.backend.shared.audit.AuditService;
-import com.invoiceapp.backend.shared.audit.outbox.OutboxService;
+import com.invoiceapp.backend.shared.outbox.OutboxService;
 import com.invoiceapp.backend.shared.exception.InvoiceAppException;
 import com.invoiceapp.backend.shared.metrics.InvoiceMetrics;
 import com.invoiceapp.backend.shared.security.CurrentUserResolver;
@@ -38,7 +37,6 @@ public class InvoiceService {
     private final InvoiceRepository invoiceRepository;
     private final PaymentRepository paymentRepository;
     private final ClientRepository clientRepository;
-    private final NotificationService notificationService;
     private final InvoiceMetrics invoiceMetrics;
     private final AuditService auditService;
     private final CurrentUserResolver currentUserResolver;
@@ -345,8 +343,6 @@ public class InvoiceService {
                 Map.of("status", target.name()),
                 user.getId()
         );
-
-        notificationService.sendStatusChange(user.getId(), invoice.getInvoiceNumber(), invoice.getId().toString(), target.name());
 
         invoiceMetrics.recordStatusTransition(target);
         if (target == InvoiceStatus.SENT || target == InvoiceStatus.PAID || target == InvoiceStatus.CANCELLED) {

@@ -18,6 +18,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @RequiredArgsConstructor
 public class NotificationService {
 
+    private static final String EVENT_NAME = "invoice-update";
     private final Map<UUID, CopyOnWriteArrayList<SseEmitter>> userEmitters = new ConcurrentHashMap<>();
 
     public SseEmitter createConnection(UUID userId) {
@@ -62,7 +63,7 @@ public class NotificationService {
 
         emitters.forEach(emitter -> {
             try {
-                emitter.send(SseEmitter.event().name("invoice-update").data(payload));
+                emitter.send(SseEmitter.event().name(EVENT_NAME).data(payload));
             } catch (Exception e) {
                 emitters.remove(emitter);
             }

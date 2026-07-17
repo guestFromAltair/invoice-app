@@ -4,10 +4,9 @@ import com.invoiceapp.backend.auth.domain.User;
 import com.invoiceapp.backend.client.domain.Client;
 import com.invoiceapp.backend.client.domain.ClientRepository;
 import com.invoiceapp.backend.invoice.domain.*;
-import com.invoiceapp.backend.notification.service.NotificationService;
 import com.invoiceapp.backend.shared.audit.AuditAction;
 import com.invoiceapp.backend.shared.audit.AuditService;
-import com.invoiceapp.backend.shared.audit.outbox.OutboxService;
+import com.invoiceapp.backend.shared.outbox.OutboxService;
 import com.invoiceapp.backend.shared.exception.InvoiceAppException;
 import com.invoiceapp.backend.shared.metrics.InvoiceMetrics;
 import com.invoiceapp.backend.shared.security.CurrentUserResolver;
@@ -51,8 +50,6 @@ class InvoiceServiceTest {
     private PaymentRepository paymentRepository;
     @Mock
     private InvoiceMetrics invoiceMetrics;
-    @Mock
-    private NotificationService notificationService;
     @Mock
     private AuditService auditService;
     @Mock
@@ -141,7 +138,6 @@ class InvoiceServiceTest {
                     eq(Map.of("status", "SENT")),
                     eq(userId)
             );
-            verify(notificationService).sendStatusChange(userId, "INV-2026-00001", invoice.getId().toString(), "SENT");
         }
 
         @Test

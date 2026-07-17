@@ -28,6 +28,11 @@ spring:
       acks: all
       properties:
         enable.idempotence: true
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      auto-offset-reset: latest
+      enable-auto-commit: false
 
   flyway:
     enabled: true
@@ -69,6 +74,8 @@ application:
   kafka:
     topic:
       invoice-events: invoice.events
+    consumer:
+      sse-group-prefix: invoice-sse
   outbox:
     relay:
       poll-interval-ms: 1000
