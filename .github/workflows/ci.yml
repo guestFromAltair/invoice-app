@@ -21,9 +21,6 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Start Docker (For Testcontainers)
-        run: sudo systemctl start docker
-
       - name: Run Test Suite
         run: |
           cd invoice-app-backend
