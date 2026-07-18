@@ -562,7 +562,7 @@ class InvoiceServiceTest {
         @Test
         @DisplayName("does nothing when no invoices are overdue")
         void no_overdue() {
-            //when(invoiceRepository.findAllOverdue(any(LocalDate.class))).thenReturn(List.of());
+            when(invoiceRepository.findAllOverdue(any(LocalDate.class))).thenReturn(List.of());
 
             int count = invoiceService.markOverdueInvoices();
 
