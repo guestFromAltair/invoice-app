@@ -36,7 +36,7 @@ public class InvoiceEventSseListener {
         try {
             InvoiceStatusChangedEvent event = jsonMapper.readValue(record.value(), InvoiceStatusChangedEvent.class);
             notificationService.sendStatusChange(
-                    event.changedBy(),
+                    event.ownerId(),
                     event.invoiceNumber(),
                     event.invoiceId().toString(),
                     event.newStatus()

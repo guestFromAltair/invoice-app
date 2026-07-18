@@ -360,6 +360,7 @@ public class InvoiceService {
                         oldStatus.name(),
                         target.name(),
                         user.getId(),
+                        invoice.getCreatedBy().getId(),
                         Instant.now()
                 )
         );

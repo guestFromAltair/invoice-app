@@ -9,5 +9,6 @@ public record InvoiceStatusChangedEvent(
         String oldStatus,
         String newStatus,
         UUID changedBy,
+        UUID ownerId,
         Instant occurredAt
 ) {}
