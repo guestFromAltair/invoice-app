@@ -130,7 +130,6 @@ export interface InvoiceNotification {
     invoiceId: string;
     invoiceNumber: string;
     newStatus: InvoiceStatus;
-    message: string;
 }
 
 export interface DashboardStats {
