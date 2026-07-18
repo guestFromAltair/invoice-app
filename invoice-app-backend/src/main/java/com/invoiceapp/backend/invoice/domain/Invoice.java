@@ -18,7 +18,10 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "invoices")
-@Data
+@Getter
+@Setter
+@ToString(exclude = {"client", "createdBy", "lineItems", "payments"})
+@EqualsAndHashCode(of = "id")
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor

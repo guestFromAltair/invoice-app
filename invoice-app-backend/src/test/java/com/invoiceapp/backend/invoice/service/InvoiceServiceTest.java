@@ -533,4 +533,42 @@ class InvoiceServiceTest {
             verifyNoInteractions(auditService);
         }
     }
+
+    @Nested
+    @DisplayName("system overdue detection")
+    class OverdueDetection {
+
+        @Test
+        @DisplayName("marks SENT invoices past due as OVERDUE, audits as system, publishes one batch")
+        void marks_overdue() {
+            Invoice inv1 = buildInvoice(InvoiceStatus.SENT, 0L);
+            Invoice inv2 = buildInvoice(InvoiceStatus.SENT, 0L);
+            when(invoiceRepository.findAllOverdue(any(LocalDate.class))).thenReturn(List.of(inv1, inv2));
+
+            int count = invoiceService.markOverdueInvoices();
+
+            assertThat(count).isEqualTo(2);
+            assertThat(inv1.getStatus()).isEqualTo(InvoiceStatus.OVERDUE);
+            assertThat(inv2.getStatus()).isEqualTo(InvoiceStatus.OVERDUE);
+
+            verify(auditService, times(2)).log(
+                    eq("INVOICE"), any(UUID.class), eq(AuditAction.INVOICE_OVERDUE),
+                    any(), any(), eq(new UUID(0L, 0L)));
+
+            verify(outboxService, times(1))
+                    .publishAll(eq("INVOICE"), eq("InvoiceStatusChanged"), anyList());
+        }
+
+        @Test
+        @DisplayName("does nothing when no invoices are overdue")
+        void no_overdue() {
+            //when(invoiceRepository.findAllOverdue(any(LocalDate.class))).thenReturn(List.of());
+
+            int count = invoiceService.markOverdueInvoices();
+
+            assertThat(count).isZero();
+            verifyNoInteractions(outboxService);
+            verifyNoInteractions(auditService);
+        }
+    }
 }
