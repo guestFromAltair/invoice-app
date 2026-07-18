@@ -25,6 +25,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Year;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -45,6 +46,8 @@ public class InvoiceService {
     private static final String INVOICE = "INVOICE";
     private static final String INVOICE_STATUS_CHANGED = "INVOICE_STATUS_CHANGED";
     private static final String MANUAL_MARK_PAID = "MANUAL_MARK_PAID";
+
+    private static final UUID SYSTEM_ACTOR = new UUID(0L, 0L);
 
     public record LineItemRequest(
             String description,
@@ -366,6 +369,55 @@ public class InvoiceService {
         );
 
         return toResponse(invoice);
+    }
+
+    @Transactional
+    public int markOverdueInvoices() {
+        List<Invoice> overdue = invoiceRepository.findAllOverdue(LocalDate.now());
+        if (overdue.isEmpty()) {
+            return 0;
+        }
+
+        List<OutboxService.OutboxMessage> messages = new ArrayList<>(overdue.size());
+
+        for (Invoice invoice : overdue) {
+            InvoiceStatus oldStatus = invoice.getStatus();
+            if (!oldStatus.canTransitionTo(InvoiceStatus.OVERDUE)) {
+                continue;
+            }
+
+            invoice.setStatus(InvoiceStatus.OVERDUE);
+
+            auditService.log(
+                    INVOICE,
+                    invoice.getId(),
+                    AuditAction.INVOICE_OVERDUE,
+                    Map.of("status", oldStatus.name()),
+                    Map.of("status", InvoiceStatus.OVERDUE.name()),
+                    SYSTEM_ACTOR
+            );
+
+            invoiceMetrics.recordStatusTransition(InvoiceStatus.OVERDUE);
+
+            messages.add(new OutboxService.OutboxMessage(
+                    invoice.getId(),
+                    new InvoiceStatusChangedEvent(
+                            invoice.getId(),
+                            invoice.getInvoiceNumber(),
+                            oldStatus.name(),
+                            InvoiceStatus.OVERDUE.name(),
+                            null,
+                            invoice.getCreatedBy().getId(),
+                            Instant.now()
+                    )
+            ));
+        }
+
+        if (!messages.isEmpty()) {
+            outboxService.publishAll(INVOICE, "InvoiceStatusChanged", messages);
+        }
+
+        return messages.size();
     }
 
     public DashboardStatsResponse getDashboardStats() {
