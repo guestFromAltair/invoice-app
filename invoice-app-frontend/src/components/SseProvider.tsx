@@ -3,8 +3,16 @@ import { useDispatch, useSelector } from 'react-redux';
 import { selectToken } from '../store/authSlice';
 import { apiSlice } from '../store/apiSlice';
 import { toast } from 'sonner';
-import type { InvoiceNotification } from '@/types';
+import type {InvoiceNotification, InvoiceStatus} from '@/types';
 import { type EventSourceMessage, fetchEventSource } from "@microsoft/fetch-event-source";
+
+const STATUS_MESSAGES: Record<InvoiceStatus, string> = {
+    DRAFT: 'Invoice moved to draft',
+    SENT: 'Invoice sent',
+    PAID: 'Invoice paid',
+    OVERDUE: 'Invoice is overdue',
+    CANCELLED: 'Invoice cancelled',
+};
 
 export function SseProvider() {
     const token = useSelector(selectToken);
@@ -39,8 +47,8 @@ export function SseProvider() {
 
                     try {
                         const notification: InvoiceNotification = JSON.parse(event.data);
-
-                        toast.info(notification.message, {
+                        const message = STATUS_MESSAGES[notification.newStatus] ?? 'Invoice updated';
+                        toast.info(message, {
                             description: `Invoice ${notification.invoiceNumber}`,
                             duration: 5000
                         });
