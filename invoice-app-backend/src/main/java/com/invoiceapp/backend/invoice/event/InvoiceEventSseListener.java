@@ -1,6 +1,7 @@
 package com.invoiceapp.backend.invoice.event;
 
 import com.invoiceapp.backend.notification.service.NotificationService;
+import com.invoiceapp.backend.shared.kafka.EventDeduplicator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 
 @Component
 @Profile("!test")
@@ -19,8 +21,10 @@ import java.nio.charset.StandardCharsets;
 public class InvoiceEventSseListener {
 
     private static final String STATUS_CHANGED = "InvoiceStatusChanged";
+    private static final String CONSUMER = "sse-listener";
 
     private final NotificationService notificationService;
+    private final EventDeduplicator eventDeduplicator;
     private final JsonMapper jsonMapper;
 
     @KafkaListener(
@@ -28,8 +32,13 @@ public class InvoiceEventSseListener {
             groupId = "#{@kafkaConsumerGroups.sseGroupId}"
     )
     public void onInvoiceEvent(ConsumerRecord<String, String> record) {
-        String eventType = header(record);
-        if (!STATUS_CHANGED.equals(eventType)) {
+        if (!STATUS_CHANGED.equals(header(record, "eventType"))) {
+            return;
+        }
+
+        String eventId = header(record, "eventId");
+        if (eventId != null && !eventDeduplicator.markIfFirstTime(UUID.fromString(eventId), CONSUMER)) {
+            log.debug("Skipping already-processed event {}", eventId);
             return;
         }
 
@@ -47,8 +56,8 @@ public class InvoiceEventSseListener {
         }
     }
 
-    private String header(ConsumerRecord<String, String> record) {
-        Header header = record.headers().lastHeader("eventType");
+    private String header(ConsumerRecord<String, String> record, String name) {
+        Header header = record.headers().lastHeader(name);
         return header == null ? null : new String(header.value(), StandardCharsets.UTF_8);
     }
 }
