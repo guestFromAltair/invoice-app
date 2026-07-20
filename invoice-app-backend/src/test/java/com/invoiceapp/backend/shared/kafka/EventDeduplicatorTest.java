@@ -11,6 +11,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -24,39 +25,41 @@ class EventDeduplicatorTest {
     private EventDeduplicator eventDeduplicator;
 
     @Test
-    @DisplayName("first sighting returns true and saves")
-    void first_time() {
+    @DisplayName("alreadyProcessed returns true when the id exists")
+    void already_processed_true() {
+        UUID id = UUID.randomUUID();
+        when(processedEventRepository.existsById(id)).thenReturn(true);
+
+        assertThat(eventDeduplicator.alreadyProcessed(id, "sse-listener")).isTrue();
+    }
+
+    @Test
+    @DisplayName("alreadyProcessed returns false when the id is new")
+    void already_processed_false() {
         UUID id = UUID.randomUUID();
         when(processedEventRepository.existsById(id)).thenReturn(false);
 
-        boolean first = eventDeduplicator.markIfFirstTime(id, "sse-listener");
+        assertThat(eventDeduplicator.alreadyProcessed(id, "sse-listener")).isFalse();
+    }
 
-        assertThat(first).isTrue();
+    @Test
+    @DisplayName("markProcessed saves the id")
+    void mark_saves() {
+        UUID id = UUID.randomUUID();
+
+        eventDeduplicator.markProcessed(id, "sse-listener");
+
         verify(processedEventRepository).save(any(ProcessedEvent.class));
     }
 
     @Test
-    @DisplayName("already-seen returns false and does not save")
-    void already_seen() {
+    @DisplayName("markProcessed swallows a duplicate-key race")
+    void mark_swallows_race() {
         UUID id = UUID.randomUUID();
-        when(processedEventRepository.existsById(id)).thenReturn(true);
-
-        boolean first = eventDeduplicator.markIfFirstTime(id, "sse-listener");
-
-        assertThat(first).isFalse();
-        verify(processedEventRepository, never()).save(any());
-    }
-
-    @Test
-    @DisplayName("lost race on insert returns false")
-    void lost_race() {
-        UUID id = UUID.randomUUID();
-        when(processedEventRepository.existsById(id)).thenReturn(false);
         when(processedEventRepository.save(any()))
                 .thenThrow(new DataIntegrityViolationException("duplicate key"));
 
-        boolean first = eventDeduplicator.markIfFirstTime(id, "sse-listener");
-
-        assertThat(first).isFalse();
+        assertThatNoException()
+                .isThrownBy(() -> eventDeduplicator.markProcessed(id, "sse-listener"));
     }
 }

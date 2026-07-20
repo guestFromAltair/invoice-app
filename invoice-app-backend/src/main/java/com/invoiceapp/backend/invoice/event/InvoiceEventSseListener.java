@@ -37,13 +37,13 @@ public class InvoiceEventSseListener {
         }
 
         String eventId = header(record, "eventId");
-        if (eventId != null && !eventDeduplicator.markIfFirstTime(UUID.fromString(eventId), CONSUMER)) {
+        if (eventId != null && eventDeduplicator.alreadyProcessed(UUID.fromString(eventId), CONSUMER)) {
             log.debug("Skipping already-processed event {}", eventId);
             return;
         }
 
         try {
-            InvoiceStatusChangedEvent event = jsonMapper.readValue(record.value(), InvoiceStatusChangedEvent.class);
+            InvoiceStatusChangedEvent event = jsonMapper.readValue(record.value(), InvoiceStatusCh ngedEvent.class);
             notificationService.sendStatusChange(
                     event.ownerId(),
                     event.invoiceNumber(),
