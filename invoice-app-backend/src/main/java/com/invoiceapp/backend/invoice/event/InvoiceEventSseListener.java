@@ -37,22 +37,21 @@ public class InvoiceEventSseListener {
         }
 
         String eventId = header(record, "eventId");
-        if (eventId != null && !eventDeduplicator.markIfFirstTime(UUID.fromString(eventId), CONSUMER)) {
+        if (eventId != null && eventDeduplicator.alreadyProcessed(UUID.fromString(eventId), CONSUMER)) {
             log.debug("Skipping already-processed event {}", eventId);
             return;
         }
 
-        try {
-            InvoiceStatusChangedEvent event = jsonMapper.readValue(record.value(), InvoiceStatusChangedEvent.class);
-            notificationService.sendStatusChange(
-                    event.ownerId(),
-                    event.invoiceNumber(),
-                    event.invoiceId().toString(),
-                    event.newStatus()
-            );
-        } catch (Exception ex) {
-            log.error("Failed to handle invoice event at partition={} offset={}",
-                    record.partition(), record.offset(), ex);
+        InvoiceStatusChangedEvent event = jsonMapper.readValue(record.value(), InvoiceStatusChangedEvent.class);
+        notificationService.sendStatusChange(
+                event.ownerId(),
+                event.invoiceNumber(),
+                event.invoiceId().toString(),
+                event.newStatus()
+        );
+
+        if (eventId != null) {
+            eventDeduplicator.markProcessed(UUID.fromString(eventId), CONSUMER);
         }
     }
 

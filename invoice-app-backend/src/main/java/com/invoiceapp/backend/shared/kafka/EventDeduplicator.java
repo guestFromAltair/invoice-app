@@ -14,16 +14,17 @@ public class EventDeduplicator {
 
     private final ProcessedEventRepository processedEventRepository;
 
+    @Transactional(readOnly = true)
+    public boolean alreadyProcessed(UUID eventId, String consumer) {
+        return processedEventRepository.existsById(eventId);
+    }
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public boolean markIfFirstTime(UUID eventId, String consumer) {
-        if (processedEventRepository.existsById(eventId)) {
-            return false;
-        }
+    public void markProcessed(UUID eventId, String consumer) {
         try {
             processedEventRepository.save(new ProcessedEvent(eventId, consumer, null));
-            return true;
-        } catch (DataIntegrityViolationException race) {
-            return false;
+        } catch (DataIntegrityViolationException alreadyThere) {
+            // Someone else marked it first, so there is nothing to do.
         }
     }
 }

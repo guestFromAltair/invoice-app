@@ -11,8 +11,8 @@ import org.springframework.kafka.config.TopicBuilder;
 @Profile("!test")
 public class KafkaTopicConfig {
     @Bean
-    public NewTopic invoiceEventsTopic(@Value("${application.kafka.topic.invoice-events}") String topicName) {
-        return TopicBuilder.name(topicName)
+    public NewTopic invoiceEventsDltTopic(@Value("${application.kafka.topic.invoice-events}") String topicName) {
+        return TopicBuilder.name(topicName + ".DLT")
                 .partitions(3)
                 .replicas(1)
                 .build();
