@@ -51,7 +51,11 @@ public class InvoiceEventSseListener {
         );
 
         if (eventId != null) {
-            eventDeduplicator.markProcessed(UUID.fromString(eventId), CONSUMER);
+            try {
+                eventDeduplicator.markProcessed(UUID.fromString(eventId), CONSUMER);
+            } catch (Exception ex) {
+                log.warn("Handled event {} but could not record it as processed", eventId, ex);
+            }
         }
     }
 

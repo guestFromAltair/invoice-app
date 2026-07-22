@@ -19,6 +19,7 @@ export function SseProvider() {
     const dispatch = useDispatch();
 
     const abortControllerRef = useRef<AbortController | null>(null);
+    const shownNotifications = useRef<Set<string>>(new Set());
 
     useEffect(() => {
         if (!token) return;
@@ -47,6 +48,13 @@ export function SseProvider() {
 
                     try {
                         const notification: InvoiceNotification = JSON.parse(event.data);
+                        const key = `${notification.invoiceId}:${notification.newStatus}`;
+                        if (shownNotifications.current.has(key)) {
+                            return;
+                        }
+
+                        shownNotifications.current.add(key);
+
                         const message = STATUS_MESSAGES[notification.newStatus] ?? 'Invoice updated';
                         toast.info(message, {
                             description: `Invoice ${notification.invoiceNumber}`,
