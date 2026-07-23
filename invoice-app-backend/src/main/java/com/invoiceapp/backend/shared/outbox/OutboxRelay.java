@@ -35,6 +35,13 @@ public class OutboxRelay {
             CompletableFuture<SendResult<String, String>> future
     ) {}
 
+    /**
+     * Deliberately NOT locked with @SchedulerLock.
+     * The batch query uses FOR UPDATE SKIP LOCKED, so several instances can
+     * poll at once and each claims different rows. That parallel draining is
+     * the point. A scheduler lock would leave one instance working and the
+     * rest idle.
+     */
     @Scheduled(fixedDelayString = "${application.outbox.relay.poll-interval-ms}")
     @Transactional
     public void publishPending() {
