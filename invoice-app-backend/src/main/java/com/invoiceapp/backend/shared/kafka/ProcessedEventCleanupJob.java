@@ -2,6 +2,7 @@ package com.invoiceapp.backend.shared.kafka;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -20,6 +21,7 @@ public class ProcessedEventCleanupJob {
     private int retentionDays;
 
     @Scheduled(cron = "0 30 3 * * *")
+    @SchedulerLock(name = "processedEventCleanup", lockAtLeastFor = "PT1M", lockAtMostFor = "PT10M")
     public void deleteOldProcessedEvents() {
         Instant cutoff = Instant.now().minus(Duration.ofDays(retentionDays));
         int deleted = processedEventRepository.deleteProcessedBefore(cutoff);
