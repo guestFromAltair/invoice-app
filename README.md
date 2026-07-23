@@ -25,19 +25,21 @@ requires the same patterns used in real financial systems:
 | Financial precision | `BigDecimal` everywhere, `NUMERIC(19,4)` in PostgreSQL — no floating point drift   |
 | Reconciliation      | Scheduled job detects inconsistencies between invoice totals and payment records  |
 | Observability       | Custom Micrometer metrics (outstanding balance gauge, invoice creation rate)       |
-| Real-time           | Server-Sent Events push invoice status changes to connected clients instantly      |
+| Real-time           | Server-Sent Events pushed by a Kafka consumer, not inline in the request           |
+| Event streaming     | Transactional outbox → Kafka → consumer groups — no dual-write between DB and broker |
 
 ---
 
 ## Tech stack
 
 **Backend**
-- Java 21, Spring Boot 3.3
+- Java 21, Spring Boot 4
 - Spring Security with JWT authentication
 - Spring Data JPA + Hibernate + PostgreSQL
 - Flyway database migrations
 - iText PDF generation
 - Micrometer + Prometheus metrics
+- Apache Kafka (Spring Kafka) for domain events
 
 **Frontend**
 - React 18 + TypeScript + Vite
@@ -61,13 +63,15 @@ invoice-app-frontend/     React SPA — deployed on Vercel
 invoice-app-backend/      Spring Boot — deployed on Railway
   ├── auth/               JWT authentication, Spring Security
   ├── client/             Client management
-  ├── invoice/            Invoice lifecycle, line items, payments, scheduler
+  ├── invoice/            Invoice lifecycle, line items, payments, events, scheduler
   ├── pdf/                iText PDF generation
   ├── notification/       SSE real-time notifications
   └── shared/
       ├── audit/          Immutable audit logging
       ├── idempotency/    Duplicate request prevention
       ├── reconciliation/ Financial consistency checks
+      ├── outbox/         Transactional outbox + Kafka relay
+      ├── kafka/          Topics, consumer groups, dedupe, retry/DLT
       └── metrics/        Custom Micrometer metrics
 ```
 
@@ -129,6 +133,20 @@ H2 is not PostgreSQL. It has different SQL syntax, constraint behavior, and UUID
 can fail in production. Testcontainers spins up a real PostgreSQL container, ensuring tests execute against the
 exact database engine utilized in production.
 
+**Why an outbox instead of publishing to Kafka directly?**
+Writing to Postgres and publishing to Kafka are two separate systems with no shared transaction. Publish first and
+the DB write can fail; write first and the publish can fail. Either way the two disagree. The outbox avoids this:
+the event is written as a row in the same transaction as the business change, so both commit or neither does.
+A scheduled relay then reads committed rows and publishes them, claiming batches with
+`SELECT ... FOR UPDATE SKIP LOCKED` so multiple instances share the work without publishing the same row twice.
+Delivery is at-least-once by design — the relay publishes, waits for the broker ack, then marks the row published.
+A crash in between means a duplicate, never a lost event. Consumers dedupe on the event id.
+
+**Why a consumer group per instance?**
+SSE connections are held in memory by whichever instance the browser connected to. With one shared consumer group,
+Kafka hands each event to exactly one instance — often not the one holding that user's connection, so the
+notification disappears. Giving each instance its own group turns "split the work" into "everyone gets a copy":
+the instance holding the connection pushes, the rest do nothing.
 ---
 
 ## Running locally
@@ -153,6 +171,8 @@ Open [http://localhost:5173](http://localhost:5173).
 
 The backend API is at [http://localhost:8080](http://localhost:8080).
 Swagger UI: [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html).
+Kafka UI: [http://localhost:8081](http://localhost:8081) — topics, messages, and consumer lag.
+Grafana: [http://localhost:3000](http://localhost:3000).
 
 ---
 
