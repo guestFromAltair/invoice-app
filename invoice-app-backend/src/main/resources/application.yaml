@@ -81,6 +81,9 @@ application:
     relay:
       poll-interval-ms: 1000
       batch-size: 100
+  idempotency:
+    ttl-seconds: 86400
+    abandoned-after-seconds: 300
 
 springdoc:
   api-docs:

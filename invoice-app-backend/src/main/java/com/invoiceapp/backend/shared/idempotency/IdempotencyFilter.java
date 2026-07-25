@@ -62,9 +62,11 @@ public class IdempotencyFilter extends OncePerRequestFilter {
 
             log.info("Replaying idempotent response for key: {} path: {}", idempotencyKey, requestPath);
             response.setStatus(stored.status());
-            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             response.setHeader("Idempotency-Replayed", "true");
-            jsonMapper.writeValue(response.getWriter(), stored.body());
+            if (stored.body() != null) {
+                response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                jsonMapper.writeValue(response.getWriter(), stored.body());
+            }
             return;
         }
 
@@ -83,11 +85,12 @@ public class IdempotencyFilter extends OncePerRequestFilter {
             int status = responseWrapper.getStatus();
             byte[] responseBody = responseWrapper.getContentAsByteArray();
 
-            if (status < 500 && responseBody.length > 0) {
-                Object parsedBody = jsonMapper.readValue(responseBody, Object.class);
-                idempotencyService.commitResponse(idempotencyKey, userId, requestPath, status, parsedBody);
-                committed = true;
-            }
+            Object parsedBody = responseBody.length > 0
+                    ? jsonMapper.readValue(responseBody, Object.class)
+                    : null;
+
+            idempotencyService.commitResponse(idempotencyKey, userId, requestPath, status, parsedBody);
+            committed = true;
         } catch (Exception filterEx) {
             log.error("Execution crashed. Committing error state.", filterEx);
             idempotencyService.commitResponse(idempotencyKey, userId, requestPath, 500, Map.of("error", "System crash"));
