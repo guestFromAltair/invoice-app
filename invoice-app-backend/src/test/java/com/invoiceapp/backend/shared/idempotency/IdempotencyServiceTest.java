@@ -1,5 +1,7 @@
 package com.invoiceapp.backend.shared.idempotency;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.test.util.ReflectionTestUtils;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import com.invoiceapp.backend.shared.metrics.InvoiceMetrics;
@@ -34,6 +36,12 @@ class IdempotencyServiceTest {
 
     @InjectMocks
     private IdempotencyService idempotencyService;
+
+    @BeforeEach
+    void setUp() {
+        ReflectionTestUtils.setField(idempotencyService, "ttlSeconds", 86400);
+        ReflectionTestUtils.setField(idempotencyService, "abandonedAfterSeconds", 300);
+    }
 
     @Test
     @DisplayName("should return empty when no stored response exists")
@@ -88,32 +96,62 @@ class IdempotencyServiceTest {
     }
 
     @Test
-    @DisplayName("should return true when lock is successfully acquired")
-    void tryLock_Success() {
-        boolean result = idempotencyService.tryLock("key", UUID.randomUUID(), "/path");
+    @DisplayName("tryLock returns true when the row is inserted or reclaimed")
+    void tryLock_acquired() {
+        when(repository.acquireLock(any(), any(), any(), any(), anyInt(), anyInt())).thenReturn(1);
 
-        assertThat(result).isTrue();
-        verify(repository).saveAndFlush(any(IdempotencyKey.class));
+        assertThat(idempotencyService.tryLock("key", UUID.randomUUID(), "/path")).isTrue();
     }
 
     @Test
-    @DisplayName("should return false when DataIntegrityViolation (race condition) occurs")
-    void tryLock_Conflict() {
-        when(repository.saveAndFlush(any())).thenThrow(DataIntegrityViolationException.class);
+    @DisplayName("tryLock returns false when another request holds the key")
+    void tryLock_held() {
+        when(repository.acquireLock(any(), any(), any(), any(), anyInt(), anyInt())).thenReturn(0);
 
-        boolean result = idempotencyService.tryLock("key", UUID.randomUUID(), "/path");
-
-        assertThat(result).isFalse();
+        assertThat(idempotencyService.tryLock("key", UUID.randomUUID(), "/path")).isFalse();
     }
 
     @Test
-    @DisplayName("should return false when generic exception occurs during locking")
-    void tryLock_GeneralError() {
-        when(repository.saveAndFlush(any())).thenThrow(RuntimeException.class);
+    @DisplayName("tryLock returns false on unexpected failure")
+    void tryLock_error() {
+        when(repository.acquireLock(any(), any(), any(), any(), anyInt(), anyInt()))
+                .thenThrow(new RuntimeException("boom"));
 
-        boolean result = idempotencyService.tryLock("key", UUID.randomUUID(), "/path");
+        assertThat(idempotencyService.tryLock("key", UUID.randomUUID(), "/path")).isFalse();
+    }
 
-        assertThat(result).isFalse();
+    @Test
+    @DisplayName("an abandoned PENDING record is treated as absent so it can be reclaimed")
+    void abandonedPendingIsIgnored() {
+        IdempotencyKey stale = IdempotencyKey.builder()
+                .responseStatus(202)
+                .responseBody("{\"status\":\"PENDING\"}")
+                .createdAt(Instant.now().minusSeconds(600))
+                .expiresAt(Instant.now().plusSeconds(86400))
+                .build();
+        when(repository.findByIdempotencyKeyAndUserIdAndRequestPath(any(), any(), any()))
+                .thenReturn(Optional.of(stale));
+
+        assertThat(idempotencyService.findExistingResponse("key", UUID.randomUUID(), "/path"))
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("a recent PENDING record still blocks the request")
+    void freshPendingStillBlocks() {
+        IdempotencyKey pending = IdempotencyKey.builder()
+                .responseStatus(202)
+                .responseBody("{\"status\":\"PENDING\"}")
+                .createdAt(Instant.now().minusSeconds(5))
+                .expiresAt(Instant.now().plusSeconds(86400))
+                .build();
+        when(repository.findByIdempotencyKeyAndUserIdAndRequestPath(any(), any(), any()))
+                .thenReturn(Optional.of(pending));
+
+        var result = idempotencyService.findExistingResponse("key", UUID.randomUUID(), "/path");
+
+        assertThat(result).isPresent();
+        assertThat(result.get().status()).isEqualTo(202);
     }
 
     @Test

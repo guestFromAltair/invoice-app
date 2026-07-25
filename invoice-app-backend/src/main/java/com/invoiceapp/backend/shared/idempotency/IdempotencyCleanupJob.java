@@ -2,26 +2,28 @@ package com.invoiceapp.backend.shared.idempotency;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class IdempotencyCleanupJob {
+
     private final IdempotencyKeyRepository repository;
 
-    @Scheduled(cron = "0 0 3 * * *")
-    @Transactional
-    public void cleanupKeys() {
-        Instant now = Instant.now();
-        Instant thirtyMinutesAgo = now.minus(30, ChronoUnit.MINUTES);
+    @Value("${application.idempotency.abandoned-after-seconds}")
+    private int abandonedAfterSeconds;
 
-        repository.deleteExpiredOrStaleKeys(now, thirtyMinutesAgo);
-        log.info("Cleanup completed: removed expired keys and stale locks.");
+    @Scheduled(cron = "0 45 3 * * *")
+    @SchedulerLock(name = "idempotencyCleanup", lockAtLeastFor = "PT1M", lockAtMostFor = "PT10M")
+    public void deleteOldKeys() {
+        Instant now = Instant.now();
+        int deleted = repository.deleteExpiredOrStaleKeys(now, now.minusSeconds(abandonedAfterSeconds));
+        log.info("Idempotency cleanup: removed {} expired or abandoned key(s)", deleted);
     }
 }

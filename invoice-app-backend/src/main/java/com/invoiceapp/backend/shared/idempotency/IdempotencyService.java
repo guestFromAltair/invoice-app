@@ -1,5 +1,7 @@
 package com.invoiceapp.backend.shared.idempotency;
 
+import org.springframework.beans.factory.annotation.Value;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import com.invoiceapp.backend.shared.metrics.InvoiceMetrics;
 import lombok.RequiredArgsConstructor;
@@ -10,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -22,18 +25,28 @@ public class IdempotencyService {
     private final JsonMapper jsonMapper;
     private final InvoiceMetrics invoiceMetrics;
 
+    private static final String PENDING_BODY = "{\"status\":\"PENDING\"}";
+
+    @Value("${application.idempotency.ttl-seconds}")
+    private int ttlSeconds;
+
+    @Value("${application.idempotency.abandoned-after-seconds}")
+    private int abandonedAfterSeconds;
+
     public Optional<StoredResponse> findExistingResponse(String idempotencyKey, UUID userId, String requestPath) {
         return repository
                 .findByIdempotencyKeyAndUserIdAndRequestPath(idempotencyKey, userId, requestPath)
                 .filter(key -> !key.isExpired())
+                .filter(key -> !isAbandonedPending(key))
                 .map(key -> {
                     try {
                         if (key.getResponseStatus() == HttpStatus.ACCEPTED.value()) {
                             return new StoredResponse(key.getResponseStatus(), null);
                         }
+                        JsonNode body = jsonMapper.readTree(key.getResponseBody());
                         return new StoredResponse(
                                 key.getResponseStatus(),
-                                jsonMapper.readTree(key.getResponseBody())
+                                (body == null || body.isNull()) ? null : body
                         );
                     } catch (Exception e) {
                         log.error("Failed to deserialize stored idempotency response", e);
@@ -43,26 +56,34 @@ public class IdempotencyService {
     }
 
     /**
-     * PHASE 1: Acquire execution lock immediately.
-     * Uses REQUIRES_NEW to instantly commit the lock row to PostgreSQL, blocking concurrent clicks.
+     * A PENDING row left behind by a request that never finished. Treated as
+     * absent so the caller falls through to tryLock and reclaims it.
+     * This is only a hint — the upsert's WHERE clause is the real arbiter.
+     */
+    private boolean isAbandonedPending(IdempotencyKey key) {
+        return key.getResponseStatus() == HttpStatus.ACCEPTED.value()
+                && key.getCreatedAt() != null
+                && key.getCreatedAt().isBefore(Instant.now().minusSeconds(abandonedAfterSeconds));
+    }
+
+    /**
+     * PHASE 1: Acquire the execution lock.
+     * A single upsert either inserts the row or takes over a dead one.
+     * 0 rows changed means another request is genuinely holding the key.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean tryLock(String idempotencyKey, UUID userId, String requestPath) {
         try {
-            IdempotencyKey record = IdempotencyKey.builder()
-                    .idempotencyKey(idempotencyKey)
-                    .userId(userId)
-                    .requestPath(requestPath)
-                    .responseStatus(HttpStatus.ACCEPTED.value())
-                    .responseBody("{\"status\":\"PENDING\"}")
-                    .build();
+            int rows = repository.acquireLock(
+                    idempotencyKey, userId, requestPath,
+                    PENDING_BODY, ttlSeconds, abandonedAfterSeconds
+            );
 
-            // Force instant write to trigger DB constraint violations in case of concurrent requests.
-            repository.saveAndFlush(record);
+            if (rows == 0) {
+                log.warn("Idempotency key is actively held. Key: {}", idempotencyKey);
+                return false;
+            }
             return true;
-        } catch (DataIntegrityViolationException e) {
-            log.warn("Concurrent payment attempt blocked by DB constraint. Key: {}", idempotencyKey);
-            return false;
         } catch (Exception e) {
             log.error("Failed to acquire idempotency lock", e);
             return false;
