@@ -36,12 +36,15 @@ services:
       APPLICATION_SECURITY_JWT_SECRET_KEY: ${JWT_SECRET}
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_DATA_REDIS_HOST: redis
       # JVM waits for a debugger on port 5005
       JAVA_TOOL_OPTIONS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   prometheus:
@@ -113,6 +116,18 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: invoiceapp-redis
+    ports:
+      - "6379:6379"
+    command: [ "redis-server", "--maxmemory-policy", "noeviction", "--appendonly", "no" ]
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 # Named volumes
 volumes:

@@ -8,7 +8,8 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "idempotency_keys")
-@Data
+@Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
