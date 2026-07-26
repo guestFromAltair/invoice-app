@@ -39,6 +39,12 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
 
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: 6379
+      timeout: 200ms
+
   profiles:
     active: dev
 
@@ -84,6 +90,9 @@ application:
   idempotency:
     ttl-seconds: 86400
     abandoned-after-seconds: 300
+  rate-limit:
+    capacity: 60
+    refill-per-second: 1
 
 springdoc:
   api-docs:

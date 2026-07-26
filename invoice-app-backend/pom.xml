@@ -188,6 +188,10 @@
 			<artifactId>shedlock-provider-jdbc-template</artifactId>
 			<version>7.7.0</version>
 		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
 	</dependencies>
 
 	<build>
