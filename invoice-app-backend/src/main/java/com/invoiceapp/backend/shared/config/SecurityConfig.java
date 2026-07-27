@@ -1,5 +1,8 @@
 package com.invoiceapp.backend.shared.config;
 
+import com.invoiceapp.backend.shared.ratelimit.RateLimitFilter;
+import com.invoiceapp.backend.shared.ratelimit.RateLimiterService;
+import io.micrometer.core.instrument.MeterRegistry;
 import tools.jackson.databind.json.JsonMapper;
 import com.invoiceapp.backend.auth.service.JwtAuthenticationFilter;
 import com.invoiceapp.backend.auth.domain.UserRepository;
@@ -43,6 +46,8 @@ public class SecurityConfig {
     private final UserRepository userRepository;
     private final IdempotencyService idempotencyService;
     private final JsonMapper jsonMapper;
+    private final RateLimiterService rateLimiterService;
+    private final MeterRegistry meterRegistry;
 
     @Value("${application.cors.allowed-origins}")
     private String[] allowedOrigins;
@@ -51,6 +56,7 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         JwtAuthenticationFilter jwtAuthFilter = new JwtAuthenticationFilter(jwtService, userRepository);
         IdempotencyFilter idempotencyFilter = new IdempotencyFilter(idempotencyService, userRepository, jsonMapper);
+        RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimiterService, jsonMapper, meterRegistry);
 
         http
                 .csrf(AbstractHttpConfigurer::disable)
@@ -70,6 +76,7 @@ public class SecurityConfig {
                 )
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(rateLimitFilter, JwtAuthenticationFilter.class)
                 .addFilterAfter(idempotencyFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
