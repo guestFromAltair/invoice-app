@@ -126,7 +126,7 @@ export interface PaymentRequest {
 
 // SSE Notification
 export interface InvoiceNotification {
-    type: 'STATUS_CHANGED' | 'OVERDUE_DETECTED';
+    type: 'STATUS_CHANGED';
     invoiceId: string;
     invoiceNumber: string;
     newStatus: InvoiceStatus;
