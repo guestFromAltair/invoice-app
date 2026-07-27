@@ -147,6 +147,20 @@ SSE connections are held in memory by whichever instance the browser connected t
 Kafka hands each event to exactly one instance — often not the one holding that user's connection, so the
 notification disappears. Giving each instance its own group turns "split the work" into "everyone gets a copy":
 the instance holding the connection pushes, the rest do nothing.
+
+**Why is idempotency in Postgres but rate limiting in Redis?**
+Both look like distributed locks, but they fail differently. The idempotency store holds payment receipts — if a
+record is lost, a retry can charge a customer twice. That needs durability and a guarantee that doesn't depend on
+timing, so it uses a unique constraint in Postgres. A unique constraint can't expire at the wrong moment; a Redis
+lease can.
+
+Rate limiting is the opposite. It runs on every request, so a database write per request would load the database we
+least want to load. And losing a counter is merely annoying — someone gets a few extra requests once. Redis is the
+right fit: fast, TTL-native, and the data isn't worth persisting.
+
+The same difference decides what happens when the store is down. Idempotency fails closed, because allowing the
+request risks a double charge. Rate limiting fails open, because a limiter that rejects everything when Redis dies
+is worse than no limiter at all.
 ---
 
 ## Running locally
