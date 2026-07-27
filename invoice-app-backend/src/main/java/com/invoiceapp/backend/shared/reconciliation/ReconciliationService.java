@@ -1,9 +1,6 @@
 package com.invoiceapp.backend.shared.reconciliation;
 
-import com.invoiceapp.backend.invoice.domain.Invoice;
-import com.invoiceapp.backend.invoice.domain.InvoiceRepository;
-import com.invoiceapp.backend.invoice.domain.InvoiceStatus;
-import com.invoiceapp.backend.invoice.domain.PaymentRepository;
+import com.invoiceapp.backend.invoice.domain.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -15,6 +12,10 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Service
@@ -51,17 +52,17 @@ public class ReconciliationService {
     @Transactional(readOnly = true)
     public ReconciliationReport runReconciliation() {
         List<ReconciliationIssue> issues = new ArrayList<>();
-        int[] totalCheckedContainer = {0};
+        AtomicInteger checkedCount = new AtomicInteger();
+
+        Map<UUID, BigDecimal> paymentsByInvoice = paymentRepository.sumAmountGroupedByInvoice()
+                .stream()
+                .collect(Collectors.toMap(InvoicePaymentSum::invoiceId, InvoicePaymentSum::total));
 
         try (Stream<Invoice> invoiceStream = invoiceRepository.streamAllActiveInvoicesForReconciliation()) {
             invoiceStream.forEach(invoice -> {
-                totalCheckedContainer[0]++;
-                BigDecimal paymentsTotal = paymentRepository.sumAmountByInvoiceId(invoice.getId());
+                checkedCount.incrementAndGet();
 
-                if (paymentsTotal == null) {
-                    paymentsTotal = BigDecimal.ZERO;
-                }
-
+                BigDecimal paymentsTotal = paymentsByInvoice.getOrDefault(invoice.getId(), BigDecimal.ZERO);
                 BigDecimal discrepancy = invoice.getTotal().subtract(paymentsTotal).setScale(4, RoundingMode.HALF_UP);
 
                 if (invoice.getStatus() == InvoiceStatus.PAID && discrepancy.compareTo(BigDecimal.ZERO) > 0) {
@@ -100,7 +101,7 @@ public class ReconciliationService {
         LocalDate ninetyDaysAgo = LocalDate.now().minusDays(90);
         try (Stream<Invoice> draftStream = invoiceRepository.streamStaleDraftsForReconciliation(ninetyDaysAgo)) {
             draftStream.forEach(draft -> {
-                totalCheckedContainer[0]++;
+                checkedCount.incrementAndGet();
                 issues.add(new ReconciliationIssue(
                         STALE_DRAFT_INVOICE,
                         draft.getInvoiceNumber(),
@@ -115,7 +116,7 @@ public class ReconciliationService {
             });
         }
 
-        int totalChecked = totalCheckedContainer[0];
+        int totalChecked = checkedCount.get();
 
         String summary = issues.isEmpty()
                 ? String.format("✅ All %d invoices reconciled successfully. No issues found.", totalChecked)

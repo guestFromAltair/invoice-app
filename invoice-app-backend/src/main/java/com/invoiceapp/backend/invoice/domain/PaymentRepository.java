@@ -18,4 +18,11 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
         WHERE p.invoice.id = :invoiceId
         """)
     BigDecimal sumAmountByInvoiceId(@Param("invoiceId") UUID invoiceId);
+
+    @Query("""
+            SELECT new com.invoiceapp.backend.invoice.domain.InvoicePaymentSum(p.invoice.id, SUM(p.amount))
+            FROM Payment p
+            GROUP BY p.invoice.id
+            """)
+    List<InvoicePaymentSum> sumAmountGroupedByInvoice();
 }

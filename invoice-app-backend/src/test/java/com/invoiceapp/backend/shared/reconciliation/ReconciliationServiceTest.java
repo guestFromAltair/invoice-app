@@ -12,6 +12,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -56,7 +57,8 @@ class ReconciliationServiceTest {
 
             when(invoiceRepository.streamAllActiveInvoicesForReconciliation()).thenReturn(Stream.of(invoice));
             when(invoiceRepository.streamStaleDraftsForReconciliation(any())).thenReturn(Stream.empty());
-            when(paymentRepository.sumAmountByInvoiceId(invoice.getId())).thenReturn(new BigDecimal("800.00"));
+            when(paymentRepository.sumAmountGroupedByInvoice())
+                    .thenReturn(List.of(new InvoicePaymentSum(invoice.getId(), new BigDecimal("800.00"))));
 
             ReconciliationService.ReconciliationReport report = reconciliationService.runReconciliation();
 
@@ -66,13 +68,13 @@ class ReconciliationServiceTest {
         }
 
         @Test
-        @DisplayName("should handle null payments safely by treating them as zero balance allocations")
-        void should_fallback_to_zero_when_sum_amount_returns_null() {
+        @DisplayName("should treat an invoice with no payments as zero")
+        void should_treat_missing_payments_as_zero() {
             Invoice invoice = buildInvoice(InvoiceStatus.PAID, new BigDecimal("500.00"), LocalDate.now().minusDays(5), LocalDate.now().plusDays(10));
 
             when(invoiceRepository.streamAllActiveInvoicesForReconciliation()).thenReturn(Stream.of(invoice));
             when(invoiceRepository.streamStaleDraftsForReconciliation(any())).thenReturn(Stream.empty());
-            when(paymentRepository.sumAmountByInvoiceId(invoice.getId())).thenReturn(null);
+            when(paymentRepository.sumAmountGroupedByInvoice()).thenReturn(List.of());
 
             ReconciliationService.ReconciliationReport report = reconciliationService.runReconciliation();
 
@@ -87,7 +89,8 @@ class ReconciliationServiceTest {
 
             when(invoiceRepository.streamAllActiveInvoicesForReconciliation()).thenReturn(Stream.of(invoice));
             when(invoiceRepository.streamStaleDraftsForReconciliation(any())).thenReturn(Stream.empty());
-            when(paymentRepository.sumAmountByInvoiceId(invoice.getId())).thenReturn(new BigDecimal("600.00"));
+            when(paymentRepository.sumAmountGroupedByInvoice())
+                    .thenReturn(List.of(new InvoicePaymentSum(invoice.getId(), new BigDecimal("600.00"))));
 
             ReconciliationService.ReconciliationReport report = reconciliationService.runReconciliation();
 
@@ -102,7 +105,8 @@ class ReconciliationServiceTest {
 
             when(invoiceRepository.streamAllActiveInvoicesForReconciliation()).thenReturn(Stream.of(invoice));
             when(invoiceRepository.streamStaleDraftsForReconciliation(any())).thenReturn(Stream.empty());
-            when(paymentRepository.sumAmountByInvoiceId(invoice.getId())).thenReturn(BigDecimal.ZERO);
+            when(paymentRepository.sumAmountGroupedByInvoice())
+                    .thenReturn(List.of(new InvoicePaymentSum(invoice.getId(), BigDecimal.ZERO)));
 
             ReconciliationService.ReconciliationReport report = reconciliationService.runReconciliation();
 
@@ -130,12 +134,34 @@ class ReconciliationServiceTest {
 
             when(invoiceRepository.streamAllActiveInvoicesForReconciliation()).thenReturn(Stream.of(invoice));
             when(invoiceRepository.streamStaleDraftsForReconciliation(any())).thenReturn(Stream.empty());
-            when(paymentRepository.sumAmountByInvoiceId(invoice.getId())).thenReturn(new BigDecimal("1000.00"));
+            when(paymentRepository.sumAmountGroupedByInvoice())
+                    .thenReturn(List.of(new InvoicePaymentSum(invoice.getId(), new BigDecimal("1000.00"))));
 
             ReconciliationService.ReconciliationReport report = reconciliationService.runReconciliation();
 
             assertThat(report.issueCount()).isZero();
             assertThat(report.summary()).contains("successfully");
+        }
+
+        @Test
+        @DisplayName("should query payment sums once, not once per invoice")
+        void should_query_payment_sums_once() {
+            Invoice first = buildInvoice(InvoiceStatus.PAID, new BigDecimal("100.00"), LocalDate.now().minusDays(5), LocalDate.now().plusDays(10));
+            Invoice second = buildInvoice(InvoiceStatus.PAID, new BigDecimal("200.00"), LocalDate.now().minusDays(5), LocalDate.now().plusDays(10));
+
+            when(invoiceRepository.streamAllActiveInvoicesForReconciliation()).thenReturn(Stream.of(first, second));
+            when(invoiceRepository.streamStaleDraftsForReconciliation(any())).thenReturn(Stream.empty());
+            when(paymentRepository.sumAmountGroupedByInvoice()).thenReturn(List.of(
+                    new InvoicePaymentSum(first.getId(), new BigDecimal("100.00")),
+                    new InvoicePaymentSum(second.getId(), new BigDecimal("200.00"))
+            ));
+
+            ReconciliationService.ReconciliationReport report = reconciliationService.runReconciliation();
+
+            assertThat(report.totalInvoicesChecked()).isEqualTo(2);
+            assertThat(report.issueCount()).isZero();
+            verify(paymentRepository, times(1)).sumAmountGroupedByInvoice();
+            verify(paymentRepository, never()).sumAmountByInvoiceId(any());
         }
     }
 
