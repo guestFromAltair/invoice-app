@@ -117,6 +117,7 @@ public class IdempotencyService {
                                 .requestPath(requestPath)
                                 .responseStatus(responseStatus)
                                 .responseBody(serializedBody)
+                                .expiresAt(Instant.now().plusSeconds(ttlSeconds))
                                 .build();
                         repository.save(record);
                     });

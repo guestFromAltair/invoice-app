@@ -42,8 +42,12 @@ public class IdempotencyKey {
 
     @PrePersist
     public void prePersist() {
-        this.createdAt = Instant.now();
-        this.expiresAt = Instant.now().plusSeconds(86400);
+        if (this.createdAt == null) {
+            this.createdAt = Instant.now();
+        }
+        if (this.expiresAt == null) {
+            this.expiresAt = Instant.now().plusSeconds(86400);
+        }
     }
 
     public boolean isExpired() {
