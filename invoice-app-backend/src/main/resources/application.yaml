@@ -84,6 +84,7 @@ application:
       sse-group-prefix: invoice-sse
       processed-retention-days: 7
   outbox:
+    retention-days: 7
     relay:
       poll-interval-ms: 1000
       batch-size: 100
