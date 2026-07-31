@@ -24,16 +24,10 @@ public class OutboxRelay {
     private final OutboxEventRepository outboxEventRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
 
-    @Value("${application.kafka.topic.invoice-events}")
-    private String topic;
-
     @Value("${application.outbox.relay.batch-size}")
     private int batchSize;
 
-    private record EventSendPair(
-            OutboxEvent event,
-            CompletableFuture<SendResult<String, String>> future
-    ) {}
+    private record EventSendPair(OutboxEvent event, CompletableFuture<SendResult<String, String>> future) {}
 
     /**
      * Deliberately NOT locked with @SchedulerLock.
@@ -70,13 +64,13 @@ public class OutboxRelay {
 
         if (!published.isEmpty()) {
             outboxEventRepository.saveAll(published);
-            log.debug("Published {} outbox event(s) to topic {}", published.size(), topic);
+            log.debug("Published {} outbox event(s)", published.size());
         }
     }
 
     private CompletableFuture<SendResult<String, String>> sendToKafka(OutboxEvent event) {
         ProducerRecord<String, String> record = new ProducerRecord<>(
-                topic,
+                event.getTopic(),
                 null,
                 event.getAggregateId().toString(),
                 event.getPayload()

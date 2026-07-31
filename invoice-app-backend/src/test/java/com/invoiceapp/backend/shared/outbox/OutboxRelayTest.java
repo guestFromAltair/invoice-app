@@ -35,7 +35,6 @@ class OutboxRelayTest {
 
     @BeforeEach
     void setUp() {
-        ReflectionTestUtils.setField(outboxRelay, "topic", "invoice.events");
         ReflectionTestUtils.setField(outboxRelay, "batchSize", 100);
     }
 
@@ -48,6 +47,7 @@ class OutboxRelayTest {
     private OutboxEvent event(String type) {
         return OutboxEvent.builder()
                 .id(UUID.randomUUID())
+                .topic("invoice.events")
                 .aggregateType("INVOICE")
                 .aggregateId(UUID.randomUUID())
                 .eventType(type)
@@ -146,5 +146,21 @@ class OutboxRelayTest {
 
         verifyNoInteractions(kafkaTemplate);
         verify(outboxEventRepository, never()).saveAll(ArgumentMatchers.<List<OutboxEvent>>any());
+    }
+
+    @Test
+    @DisplayName("publishes to the topic stored on the row")
+    @SuppressWarnings("unchecked")
+    void routes_by_row_topic() {
+        OutboxEvent e = event("InvoiceReadyForDelivery");
+        e.setTopic("invoice.delivery");
+        when(outboxEventRepository.findUnpublishedBatch(100)).thenReturn(List.of(e));
+        stubSuccessfulSend();
+
+        outboxRelay.publishPending();
+
+        ArgumentCaptor<ProducerRecord<String, String>> captor = ArgumentCaptor.forClass(ProducerRecord.class);
+        verify(kafkaTemplate).send(captor.capture());
+        assertThat(captor.getValue().topic()).isEqualTo("invoice.delivery");
     }
 }

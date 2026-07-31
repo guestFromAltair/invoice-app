@@ -30,6 +30,9 @@ public class OutboxEvent {
     @Column(nullable = false)
     private String eventType;
 
+    @Column(nullable = false)
+    private String topic;
+
     @Column(columnDefinition = "JSONB", nullable = false)
     @JdbcTypeCode(SqlTypes.JSON)
     private String payload;

@@ -61,6 +61,7 @@ class InvoiceEventFlowIntegrationTest extends PostgresTestContainer {
                 """.formatted(invoiceId, userId, userId);
 
         OutboxEvent event = outboxEventRepository.save(OutboxEvent.builder()
+                .topic("invoice.events")
                 .aggregateType("INVOICE")
                 .aggregateId(invoiceId)
                 .eventType("InvoiceStatusChanged")
