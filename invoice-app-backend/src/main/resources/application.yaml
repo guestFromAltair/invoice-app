@@ -80,6 +80,7 @@ application:
   kafka:
     topic:
       invoice-events: invoice.events
+      invoice-delivery: invoice.delivery
     consumer:
       sse-group-prefix: invoice-sse
       processed-retention-days: 7

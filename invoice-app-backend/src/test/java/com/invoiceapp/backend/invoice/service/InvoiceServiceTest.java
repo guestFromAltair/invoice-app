@@ -4,6 +4,7 @@ import com.invoiceapp.backend.auth.domain.User;
 import com.invoiceapp.backend.client.domain.Client;
 import com.invoiceapp.backend.client.domain.ClientRepository;
 import com.invoiceapp.backend.invoice.domain.*;
+import com.invoiceapp.backend.invoice.event.InvoiceReadyForDeliveryEvent;
 import com.invoiceapp.backend.shared.audit.AuditAction;
 import com.invoiceapp.backend.shared.audit.AuditService;
 import com.invoiceapp.backend.shared.outbox.OutboxService;
@@ -22,6 +23,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -83,6 +85,8 @@ class InvoiceServiceTest {
                 .build();
 
         lenient().when(currentUserResolver.resolveUser()).thenReturn(testUser);
+
+        ReflectionTestUtils.setField(invoiceService, "deliveryTopic", "invoice.delivery");
     }
 
     private Invoice buildInvoice(InvoiceStatus status, Long version) {
@@ -570,5 +574,32 @@ class InvoiceServiceTest {
             verifyNoInteractions(outboxService);
             verifyNoInteractions(auditService);
         }
+    }
+
+    @Test
+    @DisplayName("emits a delivery event when an invoice is sent")
+    void emits_delivery_event_on_send() {
+        Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 1L);
+        when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
+
+        invoiceService.send(invoice.getId(), 1L);
+
+        verify(outboxService).publishTo(
+                eq("invoice.delivery"), eq("INVOICE"), eq(invoice.getId()),
+                eq("InvoiceReadyForDelivery"), any(InvoiceReadyForDeliveryEvent.class));
+    }
+
+    @Test
+    @DisplayName("skips the delivery event when the client has no email")
+    void skips_delivery_event_without_email() {
+        Invoice invoice = buildInvoice(InvoiceStatus.DRAFT, 1L);
+        invoice.getClient().setEmail(null);
+        when(invoiceRepository.findByIdAndCreatedById(invoice.getId(), userId)).thenReturn(Optional.of(invoice));
+
+        invoiceService.send(invoice.getId(), 1L);
+
+        verify(outboxService, never()).publishTo(any(), any(), any(), any(), any());
+        // the status event still fires
+        verify(outboxService).publish(any(), any(), any(), any());
     }
 }
