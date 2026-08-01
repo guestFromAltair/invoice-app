@@ -5,6 +5,7 @@ import com.invoiceapp.backend.client.domain.Client;
 import com.invoiceapp.backend.client.domain.ClientRepository;
 import com.invoiceapp.backend.invoice.domain.*;
 import com.invoiceapp.backend.invoice.event.InvoiceCreatedEvent;
+import com.invoiceapp.backend.invoice.event.InvoiceReadyForDeliveryEvent;
 import com.invoiceapp.backend.invoice.event.InvoiceStatusChangedEvent;
 import com.invoiceapp.backend.shared.audit.AuditAction;
 import com.invoiceapp.backend.shared.audit.AuditService;
@@ -13,6 +14,8 @@ import com.invoiceapp.backend.shared.exception.InvoiceAppException;
 import com.invoiceapp.backend.shared.metrics.InvoiceMetrics;
 import com.invoiceapp.backend.shared.security.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -33,6 +36,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
+@Slf4j
 public class InvoiceService {
 
     private final InvoiceRepository invoiceRepository;
@@ -48,6 +52,9 @@ public class InvoiceService {
     private static final String MANUAL_MARK_PAID = "MANUAL_MARK_PAID";
 
     private static final UUID SYSTEM_ACTOR = new UUID(0L, 0L);
+
+    @Value("${application.kafka.topic.invoice-delivery}")
+    private String deliveryTopic;
 
     public record LineItemRequest(
             String description,
@@ -368,6 +375,10 @@ public class InvoiceService {
                 )
         );
 
+        if (target == InvoiceStatus.SENT) {
+            publishDeliveryEvent(invoice);
+        }
+
         return toResponse(invoice);
     }
 
@@ -499,6 +510,46 @@ public class InvoiceService {
                 "lineItems", lineItems,
                 "subtotal", invoice.getSubtotal().toString(),
                 "total", invoice.getTotal().toString()
+        );
+    }
+
+    private void publishDeliveryEvent(Invoice invoice) {
+        Client client = invoice.getClient();
+        if (client.getEmail() == null || client.getEmail().isBlank()) {
+            log.warn("Invoice {} sent but client {} has no email — no delivery event emitted",
+                    invoice.getInvoiceNumber(), client.getId());
+            return;
+        }
+
+        List<InvoiceReadyForDeliveryEvent.Line> lines = invoice.getLineItems().stream()
+                .map(li -> new InvoiceReadyForDeliveryEvent.Line(
+                        li.getDescription(), li.getQuantity(), li.getUnitPrice(),
+                        li.getDiscountPct(), li.getLineTotal(), li.getPosition()))
+                .toList();
+
+        outboxService.publishTo(
+                deliveryTopic,
+                INVOICE,
+                invoice.getId(),
+                "InvoiceReadyForDelivery",
+                new InvoiceReadyForDeliveryEvent(
+                        invoice.getId(),
+                        invoice.getInvoiceNumber(),
+                        invoice.getCreatedBy().getId(),
+                        invoice.getStatus().name(),
+                        new InvoiceReadyForDeliveryEvent.Recipient(
+                                client.getName(), client.getEmail(),
+                                client.getAddress(), client.getVatNumber()),
+                        invoice.getIssueDate(),
+                        invoice.getDueDate(),
+                        invoice.getSubtotal(),
+                        invoice.getTaxRate(),
+                        invoice.getTaxAmount(),
+                        invoice.getTotal(),
+                        invoice.getNotes(),
+                        lines,
+                        Instant.now()
+                )
         );
     }
 }

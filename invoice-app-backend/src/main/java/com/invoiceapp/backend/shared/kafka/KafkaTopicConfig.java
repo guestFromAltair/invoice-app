@@ -17,4 +17,12 @@ public class KafkaTopicConfig {
                 .replicas(1)
                 .build();
     }
+
+    @Bean
+    public NewTopic invoiceDeliveryTopic(@Value("${application.kafka.topic.invoice-delivery}") String topicName) {
+        return TopicBuilder.name(topicName)
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
 }
