@@ -1,0 +1,1 @@
+ALTER TABLE delivery_attempts ADD CONSTRAINT uq_delivery_invoice UNIQUE (invoice_id);

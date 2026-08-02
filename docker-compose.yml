@@ -153,9 +153,12 @@ services:
     container_name: invoiceapp-delivery
     ports:
       - "8082:8082"
+      - "5006:5005" # Debug port
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://delivery-db:5432/delivery
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      # JVM waits for a debugger on port 5005
+      JAVA_TOOL_OPTIONS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
     depends_on:
       delivery-db:
         condition: service_healthy
