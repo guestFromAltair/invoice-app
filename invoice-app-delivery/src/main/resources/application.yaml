@@ -14,6 +14,10 @@ spring:
 
   kafka:
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
     consumer:
       group-id: invoice-delivery
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
@@ -21,12 +25,15 @@ spring:
       auto-offset-reset: earliest
       enable-auto-commit: false
 
-application:
-  kafka:
-    topic:
-      invoice-delivery: invoice.delivery
-  delivery:
-    pdf-output-dir: ${PDF_OUTPUT_DIR:/tmp/invoice-pdfs}
+  mail:
+    host: ${SPRING_MAIL_HOST:localhost}
+    port: ${SPRING_MAIL_PORT:1025}
+    properties:
+      mail.smtp.auth: false
+      mail.smtp.starttls.enable: false
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
 
 server:
   port: 8082
@@ -36,3 +43,20 @@ management:
     web:
       exposure:
         include: health, info
+
+application:
+  kafka:
+    topic:
+      invoice-delivery: invoice.delivery
+  delivery:
+    pdf-output-dir: ${PDF_OUTPUT_DIR:/tmp/invoice-pdfs}
+    from-address: invoices@invoiceapp.local
+    max-attempts: 5
+    retry-base-seconds: 60
+    retry-max-seconds: 21600
+    retry-poll-ms: 30000
+    retry-batch-size: 50
+
+logging:
+  level:
+    com.invoiceapp.delivery: DEBUG
