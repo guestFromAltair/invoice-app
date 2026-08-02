@@ -1,5 +1,6 @@
 package com.invoiceapp.delivery.pdf;
 
+import com.invoiceapp.delivery.InvoicePdfRenderer;
 import com.invoiceapp.delivery.event.InvoiceReadyForDeliveryEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

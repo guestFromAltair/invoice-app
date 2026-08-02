@@ -1,4 +1,4 @@
-package com.invoiceapp.delivery.pdf;
+package com.invoiceapp.delivery;
 
 import com.invoiceapp.delivery.event.InvoiceReadyForDeliveryEvent;
 import com.itextpdf.kernel.colors.DeviceRgb;

@@ -157,13 +157,30 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://delivery-db:5432/delivery
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      # JVM waits for a debugger on port 5005
+      SPRING_MAIL_HOST: mailpit
+      SPRING_MAIL_PORT: 1025
       JAVA_TOOL_OPTIONS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "--spider", "http://localhost:8082/actuator/health" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
     depends_on:
       delivery-db:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      mailpit:
+        condition: service_started
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: invoiceapp-mailpit
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # web inbox
+    environment:
+      MP_MAX_MESSAGES: 500
 
 # Named volumes
 volumes:

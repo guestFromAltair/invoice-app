@@ -2,6 +2,8 @@ package com.invoiceapp.delivery.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -46,6 +48,12 @@ public class DeliveryAttempt {
 
     @Column(nullable = false)
     private Instant updatedAt;
+
+    @Column(columnDefinition = "JSONB")
+    @JdbcTypeCode(SqlTypes.JSON)
+    private String payload;
+
+    private Instant nextAttemptAt;
 
     @PrePersist
     void onCreate() {
