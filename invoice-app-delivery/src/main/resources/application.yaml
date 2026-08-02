@@ -21,6 +21,13 @@ spring:
       auto-offset-reset: earliest
       enable-auto-commit: false
 
+application:
+  kafka:
+    topic:
+      invoice-delivery: invoice.delivery
+  delivery:
+    pdf-output-dir: ${PDF_OUTPUT_DIR:/tmp/invoice-pdfs}
+
 server:
   port: 8082
 
