@@ -1,14 +1,12 @@
 package com.invoiceapp.delivery.service;
 
 import com.invoiceapp.delivery.domain.DeliveryAttempt;
-import com.invoiceapp.delivery.domain.DeliveryAttemptRepository;
 import com.invoiceapp.delivery.event.InvoiceReadyForDeliveryEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
@@ -17,7 +15,8 @@ import java.util.List;
 @RequiredArgsConstructor
 @Slf4j
 public class DeliveryRetryJob {
-    private final DeliveryAttemptRepository repository;
+
+    private final DeliveryStore deliveryStore;
     private final DeliveryService deliveryService;
     private final JsonMapper jsonMapper;
 
@@ -25,25 +24,25 @@ public class DeliveryRetryJob {
     private int batchSize;
 
     @Scheduled(fixedDelayString = "${application.delivery.retry-poll-ms}")
-    @Transactional
     public void retryFailedDeliveries() {
-        List<DeliveryAttempt> due = repository.findDueForRetry(batchSize);
-        log.debug("Retry poll: {} attempt(s) due", due.size());
-
+        List<DeliveryAttempt> due = deliveryStore.claimDueForRetry(batchSize);
         if (due.isEmpty()) {
             return;
         }
 
         for (DeliveryAttempt attempt : due) {
             try {
-                InvoiceReadyForDeliveryEvent event = jsonMapper.readValue(attempt.getPayload(), InvoiceReadyForDeliveryEvent.class);
-                deliveryService.attemptDelivery(attempt, event);
+                InvoiceReadyForDeliveryEvent event =
+                        jsonMapper.readValue(attempt.getPayload(), InvoiceReadyForDeliveryEvent.class);
+
+                DeliveryOutcome outcome = deliveryService.attemptDelivery(attempt, event);
+                deliveryStore.recordOutcome(attempt.getId(), outcome);
+
             } catch (Exception e) {
                 log.error("Could not retry delivery {}", attempt.getInvoiceNumber(), e);
             }
         }
 
-        repository.saveAll(due);
         log.debug("Retried {} delivery attempt(s)", due.size());
     }
 }

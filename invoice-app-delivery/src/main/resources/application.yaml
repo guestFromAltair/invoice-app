@@ -49,13 +49,13 @@ application:
     topic:
       invoice-delivery: invoice.delivery
   delivery:
-    pdf-output-dir: ${PDF_OUTPUT_DIR:/tmp/invoice-pdfs}
     from-address: invoices@invoiceapp.local
     max-attempts: 5
     retry-base-seconds: 60
     retry-max-seconds: 21600
     retry-poll-ms: 30000
     retry-batch-size: 50
+    retry-lease-seconds: 300
 
 logging:
   level:

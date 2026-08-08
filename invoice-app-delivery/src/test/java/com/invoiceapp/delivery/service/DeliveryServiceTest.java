@@ -5,7 +5,9 @@ import com.invoiceapp.delivery.domain.DeliveryAttempt;
 import com.invoiceapp.delivery.domain.DeliveryStatus;
 import com.invoiceapp.delivery.email.InvoiceEmailSender;
 import com.invoiceapp.delivery.event.InvoiceReadyForDeliveryEvent;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -19,11 +21,13 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("DeliveryService")
 class DeliveryServiceTest {
+
     @Mock private InvoicePdfRenderer renderer;
     @Mock private InvoiceEmailSender emailSender;
 
@@ -38,61 +42,62 @@ class DeliveryServiceTest {
     }
 
     @Test
-    @DisplayName("marks SENT on success")
+    @DisplayName("returns SENT on success")
     void sends() throws Exception {
         when(renderer.render(any())).thenReturn(new byte[]{1, 2, 3});
-        DeliveryAttempt a = attempt("billing@acme.com", 0);
 
-        service.attemptDelivery(a, event());
+        DeliveryOutcome outcome = service.attemptDelivery(attempt("billing@acme.com", 0), event());
 
-        assertThat(a.getStatus()).isEqualTo(DeliveryStatus.SENT);
-        assertThat(a.getNextAttemptAt()).isNull();
-        verify(emailSender).send(eq("billing@acme.com"), any(), any(), any());
+        assertThat(outcome.status()).isEqualTo(DeliveryStatus.SENT);
+        assertThat(outcome.attempts()).isEqualTo(1);
+        assertThat(outcome.nextAttemptAt()).isNull();
+        verify(emailSender).send(eq("billing@acme.com"), eq("INV-2026-00001"), any(), any());
     }
 
     @Test
-    @DisplayName("schedules a retry on a transient failure")
+    @DisplayName("returns FAILED with a future retry time on a transient failure")
     void retries() throws Exception {
         when(renderer.render(any())).thenReturn(new byte[]{1});
         doThrow(new RuntimeException("smtp down")).when(emailSender).send(any(), any(), any(), any());
-        DeliveryAttempt a = attempt("billing@acme.com", 0);
 
-        service.attemptDelivery(a, event());
+        DeliveryOutcome outcome = service.attemptDelivery(attempt("billing@acme.com", 0), event());
 
-        assertThat(a.getStatus()).isEqualTo(DeliveryStatus.FAILED);
-        assertThat(a.getAttempts()).isEqualTo(1);
-        assertThat(a.getNextAttemptAt()).isAfter(Instant.now());
+        assertThat(outcome.status()).isEqualTo(DeliveryStatus.FAILED);
+        assertThat(outcome.attempts()).isEqualTo(1);
+        assertThat(outcome.nextAttemptAt()).isAfter(Instant.now());
+        assertThat(outcome.error()).contains("smtp down");
     }
 
     @Test
-    @DisplayName("abandons after the attempt limit")
+    @DisplayName("returns ABANDONED once the attempt limit is reached")
     void abandons_after_limit() throws Exception {
         when(renderer.render(any())).thenReturn(new byte[]{1});
         doThrow(new RuntimeException("still down")).when(emailSender).send(any(), any(), any(), any());
-        DeliveryAttempt a = attempt("billing@acme.com", 2);
 
-        service.attemptDelivery(a, event());
+        DeliveryOutcome outcome = service.attemptDelivery(attempt("billing@acme.com", 2), event());
 
-        assertThat(a.getStatus()).isEqualTo(DeliveryStatus.ABANDONED);
-        assertThat(a.getNextAttemptAt()).isNull();
+        assertThat(outcome.status()).isEqualTo(DeliveryStatus.ABANDONED);
+        assertThat(outcome.nextAttemptAt()).isNull();
     }
 
     @Test
-    @DisplayName("abandons immediately on a malformed address")
-    void abandons_bad_address() throws Exception {
-        DeliveryAttempt a = attempt("not-an-email", 0);
+    @DisplayName("abandons immediately on a malformed address without calling SMTP")
+    void abandons_bad_address() {
+        DeliveryOutcome outcome = service.attemptDelivery(attempt("not-an-email", 0), event());
 
-        service.attemptDelivery(a, event());
-
-        assertThat(a.getStatus()).isEqualTo(DeliveryStatus.ABANDONED);
-        verifyNoInteractions(emailSender);
+        assertThat(outcome.status()).isEqualTo(DeliveryStatus.ABANDONED);
+        verifyNoInteractions(emailSender, renderer);
     }
 
     private DeliveryAttempt attempt(String recipient, int attempts) {
         return DeliveryAttempt.builder()
-                .invoiceId(UUID.randomUUID()).invoiceNumber("INV-2026-00001")
-                .ownerId(UUID.randomUUID()).recipient(recipient)
-                .status(DeliveryStatus.PENDING).attempts(attempts)
+                .id(UUID.randomUUID())
+                .invoiceId(UUID.randomUUID())
+                .invoiceNumber("INV-2026-00001")
+                .ownerId(UUID.randomUUID())
+                .recipient(recipient)
+                .status(DeliveryStatus.PENDING)
+                .attempts(attempts)
                 .build();
     }
 
