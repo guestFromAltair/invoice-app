@@ -1,10 +1,9 @@
 package com.invoiceapp.delivery.service;
 
+import com.invoiceapp.delivery.InvoicePdfRenderer;
 import com.invoiceapp.delivery.domain.DeliveryAttempt;
-import com.invoiceapp.delivery.domain.DeliveryStatus;
 import com.invoiceapp.delivery.email.InvoiceEmailSender;
 import com.invoiceapp.delivery.event.InvoiceReadyForDeliveryEvent;
-import com.invoiceapp.delivery.InvoicePdfRenderer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,44 +27,36 @@ public class DeliveryService {
     @Value("${application.delivery.retry-max-seconds}")
     private long retryMaxSeconds;
 
-    public void attemptDelivery(DeliveryAttempt attempt, InvoiceReadyForDeliveryEvent event) {
-        attempt.setAttempts(attempt.getAttempts() + 1);
+    public DeliveryOutcome attemptDelivery(DeliveryAttempt attempt, InvoiceReadyForDeliveryEvent event) {
+        int attemptNumber = attempt.getAttempts() + 1;
 
         if (!InvoiceEmailSender.isValidAddress(attempt.getRecipient())) {
-            abandon(attempt, "Invalid recipient address");
-            return;
+            log.error("Abandoning delivery of {}: invalid address '{}'",
+                    attempt.getInvoiceNumber(), attempt.getRecipient());
+            return DeliveryOutcome.abandoned(attemptNumber, "Invalid recipient address");
         }
 
         try {
             byte[] pdf = renderer.render(event);
             emailSender.send(attempt.getRecipient(), event.invoiceNumber(), event.recipient().name(), pdf);
 
-            attempt.setStatus(DeliveryStatus.SENT);
-            attempt.setNextAttemptAt(null);
-            attempt.setLastError(null);
             log.info("Sent invoice {} to {}", event.invoiceNumber(), attempt.getRecipient());
-
+            return DeliveryOutcome.sent(attemptNumber);
         } catch (Exception e) {
-            if (attempt.getAttempts() >= maxAttempts) {
-                abandon(attempt, "Gave up after " + attempt.getAttempts() + " attempts: " + e.getMessage());
-            } else {
-                attempt.setStatus(DeliveryStatus.FAILED);
-                attempt.setLastError(e.getMessage());
-                attempt.setNextAttemptAt(Instant.now().plusSeconds(backoffSeconds(attempt.getAttempts())));
-                log.warn("Delivery of {} failed (attempt {}), retrying at {}",
-                        event.invoiceNumber(), attempt.getAttempts(), attempt.getNextAttemptAt());
+            if (attemptNumber >= maxAttempts) {
+                log.error("Abandoning delivery of {} after {} attempts", attempt.getInvoiceNumber(), attemptNumber, e);
+                return DeliveryOutcome.abandoned(attemptNumber,
+                        "Gave up after " + attemptNumber + " attempts: " + e.getMessage());
             }
+
+            Instant nextAttempt = Instant.now().plusSeconds(backoffSeconds(attemptNumber));
+            log.warn("Delivery of {} failed (attempt {}), retrying at {}",
+                    attempt.getInvoiceNumber(), attemptNumber, nextAttempt);
+            return DeliveryOutcome.retry(attemptNumber, e.getMessage(), nextAttempt);
         }
     }
 
-    private void abandon(DeliveryAttempt attempt, String reason) {
-        attempt.setStatus(DeliveryStatus.ABANDONED);
-        attempt.setLastError(reason);
-        attempt.setNextAttemptAt(null);
-        log.error("Abandoned delivery of {}: {}", attempt.getInvoiceNumber(), reason);
-    }
-
-    private long backoffSeconds(int attempts) {
-        return Math.min(retryMaxSeconds, retryBaseSeconds * (1L << (attempts - 1)));
+    private long backoffSeconds(int attemptNumber) {
+        return Math.min(retryMaxSeconds, retryBaseSeconds * (1L << (attemptNumber - 1)));
     }
 }
